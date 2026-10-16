@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reloop — Focused Study Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="topbar">
+    <div class="brand-group">
+      <div class="brand-mark">R</div>
+      <span class="brand-name">Reloop</span>
+      <span class="brand-tag">Workspace</span>
+    </div>
+
+    <div class="controls">
+      <div class="select-wrapper">
+        <select id="localEngineSelect" class="engine-select">
+          <option value="webllm-fast">Local Engine: SmolLM2 360M</option>
+          <option value="webllm-deep">Local Engine: Llama 3.2 1B</option>
+          <option value="ollama">Localhost: Ollama (11434)</option>
+        </select>
+      </div>
+      <input type="text" id="ytUrlInput" placeholder="https://www.youtube.com/watch?v=..." />
+      <button id="startStudyBtn" class="btn-primary">Enter Focus Session</button>
+    </div>
+
+    <div class="status-group">
+      <span class="status-dot"></span>
+      <div id="cacheBadge" class="cache-badge">Storage: 0 MB</div>
+    </div>
+  </header>
+
+  <!-- Main Split-Screen Workspace -->
+  <main class="workspace">
+    <!-- Left Column: Lecture Player + Structured Notes -->
+    <section class="video-panel">
+      <div class="video-wrapper">
+        <!-- Clean Starting State -->
+        <div id="videoStartPlaceholder" class="video-placeholder">
+          <div class="placeholder-box">
+            <span class="eyebrow">SESSION STANDBY</span>
+            <h2>No Lecture Loaded</h2>
+            <p>Paste a YouTube lecture URL in the toolbar above to initialize fullscreen focus mode, real-time note extraction, and progressive concept mapping.</p>
+            <div id="cachedSessionsList" class="cached-list"></div>
+          </div>
+        </div>
+        <div id="player"></div>
+      </div>
+
+      <div class="notes-box">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>LECTURE NOTES</span>
+            <span class="panel-subtitle">Auto-indexed every 15s</span>
+          </div>
+          <span id="focusTimer" class="mono-badge">00:00</span>
+        </div>
+        <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
+      </div>
+    </section>
+
+    <!-- Right Column: Architectural Concept Map Canvas -->
+    <section class="diagram-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span>CONCEPT ARCHITECTURE</span>
+          <span id="diagramStatus" class="status-text">Idle</span>
+        </div>
+        <div class="diagram-actions">
+          <button id="zoomOutBtn" class="btn-icon" title="Zoom Out">&minus;</button>
+          <button id="zoomResetBtn" class="btn-small mono-text">100%</button>
+          <button id="zoomInBtn" class="btn-icon" title="Zoom In">&plus;</button>
+          <button id="refreshDiagramBtn" class="btn-small">Sync Step</button>
+        </div>
+      </div>
+
+      <div id="mermaidContainer" class="mermaid-box">
+        <div class="empty-diagram-msg">
+          Concept graph will render here as lecture segments complete.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Fullscreen Focus Guard Modal -->
+  <div id="lockOverlay" class="lock-overlay hidden">
+    <div class="lock-card">
+      <span class="lock-eyebrow">FOCUS INTERRUPTED</span>
+      <h2>Session Paused</h2>
+      <p id="motivationText">
+        Fullscreen mode was exited. Return to fullscreen to resume lecture playback and live concept indexing.
+      </p>
+      <button id="resumeFocusBtn" class="btn-primary">Resume Session</button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
