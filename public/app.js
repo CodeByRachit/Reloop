@@ -13,12 +13,14 @@ mermaid.initialize({
     secondaryColor: '#f4f4f5',
     tertiaryColor: '#fafafa',
     fontFamily: 'Inter, -apple-system, sans-serif',
-    fontSize: '13px'
+    fontSize: '14px'
   },
   flowchart: {
+    useMaxWidth: false, // Prevents Mermaid from shrinking large diagrams!
+    htmlLabels: true,
     curve: 'basis',
-    nodeSpacing: 35,
-    rankSpacing: 45
+    nodeSpacing: 40,
+    rankSpacing: 50
   }
 });
 
@@ -28,6 +30,8 @@ const MODELS = {
 };
 
 const STEP_INTERVAL_SECONDS = 15;
+const MIN_ZOOM = 0.1; // 10%
+const MAX_ZOOM = 8.0; // 800%
 
 let mlcEngine = null;
 let loadedModelId = null;
@@ -39,7 +43,14 @@ let isStudying = false;
 let isGenerating = false;
 let focusSeconds = 0;
 let lastCompletedStep = -1;
-let currentZoom = 1;
+
+// Pan & Zoom State
+let currentZoom = 1.0;
+let panX = 0;
+let panY = 0;
+let isPanning = false;
+let startPanX = 0;
+let startPanY = 0;
 
 const localEngineSelect = document.getElementById('localEngineSelect');
 const ytUrlInput = document.getElementById('ytUrlInput');
@@ -479,36 +490,94 @@ async function renderMermaid(code) {
     mermaidContainer.innerHTML = '';
     const id = 'mermaidSvg_' + Date.now();
     const { svg } = await mermaid.render(id, code);
-    mermaidContainer.innerHTML = `<div id="mermaidZoomTarget" style="transform: scale(${currentZoom}); transform-origin: top center; transition: transform 0.18s ease;">${svg}</div>`;
+    mermaidContainer.innerHTML = `<div id="mermaidZoomTarget">${svg}</div>`;
+
+    // Strip any inline max-width so the SVG stays crisp and full-sized
+    const svgEl = mermaidContainer.querySelector('svg');
+    if (svgEl) {
+      svgEl.style.maxWidth = 'none';
+      const viewBox = svgEl.getAttribute('viewBox');
+      if (viewBox) {
+        const parts = viewBox.split(/\s+|,/).map(Number);
+        if (parts.length === 4 && parts[2] > 0) {
+          svgEl.style.width = `${Math.max(parts[2], 520)}px`;
+        }
+      }
+    }
+
+    applyZoomAndPan();
   } catch (err) {
     mermaidContainer.innerHTML = `<pre style="color:#52525b; font-size:0.78rem;">${code}</pre>`;
   }
 }
 
 // ============================================================================
-// 4. ZOOM CONTROLS, START BUTTON & FULLSCREEN LOCK
+// 4. HIGH-RANGE ZOOM (10% TO 800%) + DRAG-TO-PAN + WHEEL ZOOM
 // ============================================================================
-function applyZoom() {
+function applyZoomAndPan() {
   const target = document.getElementById('mermaidZoomTarget');
-  if (target) target.style.transform = `scale(${currentZoom})`;
+  if (target) {
+    target.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+  }
   zoomResetBtn.textContent = `${Math.round(currentZoom * 100)}%`;
 }
 
+function setZoom(newZoom) {
+  currentZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +newZoom.toFixed(2)));
+  applyZoomAndPan();
+}
+
 zoomInBtn.addEventListener('click', () => {
-  currentZoom = Math.min(2.0, +(currentZoom + 0.15).toFixed(2));
-  applyZoom();
+  const step = currentZoom >= 2.0 ? 0.5 : 0.25;
+  setZoom(currentZoom + step);
 });
 
 zoomOutBtn.addEventListener('click', () => {
-  currentZoom = Math.max(0.5, +(currentZoom - 0.15).toFixed(2));
-  applyZoom();
+  const step = currentZoom > 2.0 ? 0.5 : 0.2;
+  setZoom(currentZoom - step);
 });
 
 zoomResetBtn.addEventListener('click', () => {
   currentZoom = 1.0;
-  applyZoom();
+  panX = 0;
+  panY = 0;
+  applyZoomAndPan();
 });
 
+// Mouse Wheel / Trackpad Pinch Zoom inside Mermaid Canvas (up to 800%)
+mermaidContainer.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+    setZoom(currentZoom * zoomFactor);
+  },
+  { passive: false }
+);
+
+// Click-and-Drag Panning inside Mermaid Canvas
+mermaidContainer.addEventListener('mousedown', (e) => {
+  isPanning = true;
+  startPanX = e.clientX - panX;
+  startPanY = e.clientY - panY;
+  mermaidContainer.classList.add('dragging');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isPanning) return;
+  panX = e.clientX - startPanX;
+  panY = e.clientY - startPanY;
+  applyZoomAndPan();
+});
+
+window.addEventListener('mouseup', () => {
+  isPanning = false;
+  mermaidContainer.classList.remove('dragging');
+});
+
+// ============================================================================
+// 5. START BUTTON, CONTINUOUS WATCH LOOP & FULLSCREEN LOCK
+// ============================================================================
 startStudyBtn.addEventListener('click', async () => {
   const url = ytUrlInput.value.trim();
   const videoId = extractVideoId(url);
