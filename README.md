@@ -72,7 +72,8 @@ Reloop/
 2. Paste any YouTube lecture URL that has captions/subtitles enabled.
 3. Click **Enter Focus Session** to launch fullscreen mode.
 4. Watch the lecture—Reloop will automatically build timestamped notes and grow the concept map step-by-step.
-5. Use the canvas controls (`+`, `-`, `100%`) to zoom and navigate the concept diagram.
+5. Use the controls below the video to play or pause, seek, skip 10 seconds, adjust volume and playback speed, toggle captions, or enter fullscreen.
+6. Use the canvas controls (`+`, `-`, `100%`) to zoom and navigate the concept diagram.
 
 ---
 
