@@ -33,108 +33,198 @@
       <button id="startStudyBtn" class="btn-primary">Enter Focus Session</button>
     </div>
 
+    <div class="topbar-actions">
+      <button id="toggleNotesBtn" class="btn-toggle" type="button" title="View Lecture Notes">
+        <svg viewBox="0 0 24 24" class="btn-icon-svg" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Notes</span>
+      </button>
+      <button id="toggleDiagramBtn" class="btn-toggle" type="button" title="View Concept Map">
+        <svg viewBox="0 0 24 24" class="btn-icon-svg" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Concept Map</span>
+      </button>
+    </div>
+
     <div class="status-group">
       <span class="status-dot"></span>
       <div id="cacheBadge" class="cache-badge">Storage: 0 MB</div>
     </div>
   </header>
 
-  <!-- Main Split-Screen Workspace -->
-  <main class="workspace">
-    <!-- Left Column: Lecture Player + Structured Notes -->
-    <section class="video-panel">
-      <div class="video-wrapper">
-        <!-- Clean Starting State -->
-        <div id="videoStartPlaceholder" class="video-placeholder">
-          <div class="placeholder-box">
-            <span class="eyebrow">SESSION STANDBY</span>
-            <h2>No Lecture Loaded</h2>
-            <p>Paste a YouTube lecture URL in the toolbar above to initialize fullscreen focus mode, real-time note extraction, and progressive concept mapping.</p>
-            <div id="cachedSessionsList" class="cached-list"></div>
+  <!-- Main Workspace Layout with Resizable Inspector -->
+  <main class="workspace" id="workspaceContainer">
+    <!-- Left / Center Column: Standard Size YouTube Player + Timestamps -->
+    <section class="video-panel" id="videoPanel">
+      <div class="video-scroll-container">
+        <div class="video-wrapper">
+          <!-- Clean Starting State -->
+          <div id="videoStartPlaceholder" class="video-placeholder">
+            <div class="placeholder-box">
+              <span class="eyebrow">SESSION STANDBY</span>
+              <h2>No Lecture Loaded</h2>
+              <p>Paste a YouTube lecture URL in the toolbar above to initialize focus mode, real-time note extraction, and progressive concept mapping.</p>
+              <div id="cachedSessionsList" class="cached-list"></div>
+            </div>
           </div>
+          <div id="player"></div>
         </div>
-        <div id="player"></div>
-      </div>
 
-      <div class="playback-controls" aria-label="Video playback controls">
-        <div class="playback-buttons">
-          <button id="skipBackBtn" class="btn-icon playback-control" type="button" aria-label="Skip back 10 seconds" title="Back 10 seconds" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4m0 4h4M4.8 8a8 8 0 1 1-.2 7"/><path d="M10 10h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/></svg>
-          </button>
-          <button id="playPauseBtn" class="btn-icon playback-control" type="button" aria-label="Play video" title="Play" disabled>
-            <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>
-            <svg class="pause-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z"/></svg>
-          </button>
-          <button id="skipForwardBtn" class="btn-icon playback-control" type="button" aria-label="Skip forward 10 seconds" title="Forward 10 seconds" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8V4m0 4h-4m3.2 0a8 8 0 1 0 .2 7"/><path d="M5 10h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Zm5 0h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/></svg>
-          </button>
-        </div>
-        <div class="playback-timeline">
-          <span id="playbackCurrentTime" class="playback-time mono-text">0:00</span>
-          <input id="playbackSeek" class="playback-control" type="range" min="0" max="0" step="0.1" value="0" aria-label="Seek video" disabled />
-          <span id="playbackDuration" class="playback-time mono-text">0:00</span>
-        </div>
-        <div class="playback-options">
-          <label class="playback-option" title="Playback speed">
-            <select id="playbackSpeed" class="playback-control" aria-label="Playback speed" disabled>
-              <option value="0.25">0.25×</option>
-              <option value="0.5">0.5×</option>
-              <option value="0.75">0.75×</option>
-              <option value="1" selected>1×</option>
-              <option value="1.25">1.25×</option>
-              <option value="1.5">1.5×</option>
-              <option value="1.75">1.75×</option>
-              <option value="2">2×</option>
-            </select>
-          </label>
-          <label class="playback-option volume-option" aria-label="Video volume">
-            <button id="muteBtn" class="btn-icon playback-control" type="button" aria-label="Mute video" title="Mute" disabled>
-              <svg class="volume-on-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path class="volume-waves" d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/></svg>
-              <svg class="volume-off-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm5 4 5 6m0-6-5 6"/></svg>
+        <div class="playback-controls" aria-label="Video playback controls">
+          <div class="playback-buttons">
+            <button id="skipBackBtn" class="btn-icon playback-control" type="button" aria-label="Skip back 10 seconds" title="Back 10 seconds" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4m0 4h4M4.8 8a8 8 0 1 1-.2 7"/><path d="M10 10h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/></svg>
             </button>
-            <input id="playbackVolume" class="playback-control volume-slider" type="range" min="0" max="100" step="1" value="100" aria-label="Video volume" disabled />
-          </label>
-          <button id="captionsBtn" class="btn-small playback-control captions-button" type="button" aria-label="Turn captions on" aria-pressed="false" title="Captions" disabled>CC</button>
-          <button id="fullscreenBtn" class="btn-icon playback-control" type="button" aria-label="Enter fullscreen" title="Fullscreen" disabled>
-            <svg class="fullscreen-enter-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></svg>
-            <svg class="fullscreen-exit-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v4H4m12-4v4h4M4 16h4v4m12-4h-4v4"/></svg>
+            <button id="playPauseBtn" class="btn-icon playback-control" type="button" aria-label="Play video" title="Play" disabled>
+              <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>
+              <svg class="pause-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z"/></svg>
+            </button>
+            <button id="skipForwardBtn" class="btn-icon playback-control" type="button" aria-label="Skip forward 10 seconds" title="Forward 10 seconds" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8V4m0 4h-4m3.2 0a8 8 0 1 0 .2 7"/><path d="M5 10h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Zm5 0h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/></svg>
+            </button>
+          </div>
+          <div class="playback-timeline">
+            <span id="playbackCurrentTime" class="playback-time mono-text">0:00</span>
+            <input id="playbackSeek" class="playback-control" type="range" min="0" max="0" step="0.1" value="0" aria-label="Seek video" disabled />
+            <span id="playbackDuration" class="playback-time mono-text">0:00</span>
+          </div>
+          <div class="playback-options">
+            <label class="playback-option" title="Playback speed">
+              <select id="playbackSpeed" class="playback-control" aria-label="Playback speed" disabled>
+                <option value="0.25">0.25×</option>
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="1.75">1.75×</option>
+                <option value="2">2×</option>
+              </select>
+            </label>
+            <label class="playback-option volume-option" aria-label="Video volume">
+              <button id="muteBtn" class="btn-icon playback-control" type="button" aria-label="Mute video" title="Mute" disabled>
+                <svg class="volume-on-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path class="volume-waves" d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/></svg>
+                <svg class="volume-off-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm5 4 5 6m0-6-5 6"/></svg>
+              </button>
+              <input id="playbackVolume" class="playback-control volume-slider" type="range" min="0" max="100" step="1" value="100" aria-label="Video volume" disabled />
+            </label>
+            <button id="captionsBtn" class="btn-small playback-control captions-button" type="button" aria-label="Turn captions on" aria-pressed="false" title="Captions" disabled>CC</button>
+            <button id="fullscreenBtn" class="btn-icon playback-control" type="button" aria-label="Enter fullscreen" title="Fullscreen" disabled>
+              <svg class="fullscreen-enter-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></svg>
+              <svg class="fullscreen-exit-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v4H4m12-4v4h4M4 16h4v4m12-4h-4v4"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Video Chapters / Key Topic Segments Timeline Bar -->
+        <div class="chapters-timeline-section" id="chaptersTimelineSection">
+          <div class="chapters-timeline-header">
+            <div class="chapters-title-group">
+              <span class="chapters-eyebrow">KEY TOPICS &amp; CHAPTERS</span>
+              <span id="currentChapterName" class="current-chapter-name">Standby</span>
+            </div>
+            <span id="chaptersCountBadge" class="mono-badge">0 topics</span>
+          </div>
+
+          <!-- Straight line with points in between covering key concepts -->
+          <div class="chapter-track-wrapper" id="chapterTrackWrapper" title="Click any point or along the timeline to jump to that key concept">
+            <div class="chapter-track-base">
+              <div class="chapter-track-progress" id="chapterTrackProgress"></div>
+              <div class="chapter-markers-container" id="chapterMarkersContainer"></div>
+            </div>
+          </div>
+
+          <!-- Horizontal scrollable chapter pills row -->
+          <div class="chapter-pills-row" id="chapterPillsRow"></div>
+        </div>
+
+        <!-- Timestamps Section Directly Below Video -->
+        <div class="timestamps-section" id="timestampsSection">
+          <div class="section-header">
+            <div class="section-title">
+              <span>TIMESTAMPS &amp; KEY MOMENTS</span>
+              <span id="timestampCountBadge" class="mono-badge">0 saved</span>
+            </div>
+            <div class="section-header-actions">
+              <button id="quickStampBtn" class="btn-small btn-stamp-trigger" type="button" title="Bookmark current video timestamp (Shortcut: T)">
+                + Mark at <span id="quickStampTimePreview" class="mono-text">0:00</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Timestamp Creator Bar -->
+          <form id="timestampForm" class="timestamp-form" onsubmit="return false;">
+            <span class="stamp-current-tag mono-text" id="formStampTimeTag">0:00</span>
+            <input type="text" id="timestampTitleInput" placeholder="Add moment title / note (e.g. Key Concept, Proof, Problem 1)..." autocomplete="off" />
+            <button type="submit" id="addTimestampSubmitBtn" class="btn-primary btn-save-stamp">Add Stamp</button>
+          </form>
+
+          <!-- Timestamps List -->
+          <div id="timestampsList" class="timestamps-list">
+            <div class="empty-timestamps-hint" id="emptyTimestampsHint">
+              No timestamps added yet. Click <strong>+ Mark at 0:00</strong> or press <strong>T</strong> while watching to bookmark moments.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Draggable Resizer Bar Between Video and Side Inspector (Hidden when sidebar collapsed) -->
+    <div class="workspace-resizer collapsed" id="workspaceResizer" title="Drag to resize video and side panel (Double click to reset)">
+      <div class="resizer-line"></div>
+    </div>
+
+    <!-- Collapsible & Resizable Side Inspector Panel for Notes & Concept Map (Closed initially) -->
+    <aside class="side-inspector collapsed" id="sideInspector">
+      <div class="inspector-tabs-header">
+        <div class="inspector-title-group">
+          <span id="inspectorTitle" class="inspector-title">Lecture Notes</span>
+        </div>
+        <div class="inspector-header-right">
+          <button id="closeInspectorBtn" class="btn-icon" title="Close Side Panel" aria-label="Close Side Panel">
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
       </div>
 
-      <div class="notes-box">
-        <div class="panel-header">
-          <div class="panel-title">
-            <span>LECTURE NOTES</span>
-            <span class="panel-subtitle">Auto-indexed every 15s</span>
+      <div class="inspector-content">
+        <!-- Tab 1: Lecture Notes -->
+        <div id="tabContentNotes" class="tab-pane active">
+          <div class="notes-box">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span>LECTURE NOTES</span>
+                <span class="panel-subtitle">Auto-indexed every 15s</span>
+              </div>
+              <span id="focusTimer" class="mono-badge">00:00</span>
+            </div>
+            <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
           </div>
-          <span id="focusTimer" class="mono-badge">00:00</span>
         </div>
-        <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
-      </div>
-    </section>
 
-    <!-- Right Column: Architectural Concept Map Canvas -->
-    <section class="diagram-panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <span>CONCEPT ARCHITECTURE</span>
-          <span id="diagramStatus" class="status-text">Idle</span>
-        </div>
-        <div class="diagram-actions">
-          <button id="zoomOutBtn" class="btn-icon" title="Zoom Out">&minus;</button>
-          <button id="zoomResetBtn" class="btn-small mono-text">100%</button>
-          <button id="zoomInBtn" class="btn-icon" title="Zoom In">&plus;</button>
-          <button id="refreshDiagramBtn" class="btn-small">Sync Step</button>
-        </div>
-      </div>
+        <!-- Tab 2: Architectural Concept Map Canvas -->
+        <div id="tabContentDiagram" class="tab-pane">
+          <div class="diagram-panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <span>CONCEPT ARCHITECTURE</span>
+                <span id="diagramStatus" class="status-text">Idle</span>
+              </div>
+              <div class="diagram-actions">
+                <button id="zoomOutBtn" class="btn-icon" title="Zoom Out">&minus;</button>
+                <button id="zoomResetBtn" class="btn-small mono-text">100%</button>
+                <button id="zoomInBtn" class="btn-icon" title="Zoom In">&plus;</button>
+                <button id="refreshDiagramBtn" class="btn-small">Sync Step</button>
+              </div>
+            </div>
 
-      <div id="mermaidContainer" class="mermaid-box">
-        <div class="empty-diagram-msg">
-          Concept graph will render here as lecture segments complete.
+            <div id="mermaidContainer" class="mermaid-box">
+              <div class="empty-diagram-msg">
+                Concept graph will render here as lecture segments complete.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </section>
+    </aside>
   </main>
 
   <!-- Fullscreen Focus Guard Modal -->
