@@ -30,9 +30,9 @@ const MODELS = {
 };
 
 const STEP_INTERVAL_SECONDS = 15;
-const NOTE_GENERATION_VERSION = 5;
-const FINAL_SUMMARY_VERSION = 5;
-const NON_EDUCATIONAL_MESSAGE = 'This does not appear to be an educational video. Notes and the concept map are unavailable for this content.';
+const NOTE_GENERATION_VERSION = 6;
+const CLASSIFICATION_VERSION = 2;
+const NON_EDUCATIONAL_MESSAGE = 'This does not appear to be an educational video. Notes are unavailable for this content.';
 const MIN_ZOOM = 0.1; // 10%
 const MAX_ZOOM = 8.0; // 800%
 
@@ -133,7 +133,7 @@ let lastRenderedDuration = 0;
 // ============================================================================
 // 1. UNLIMITED BROWSER CACHE (IndexedDB)
 // ============================================================================
-const DB_NAME = 'ReloopBranchingDB_v4';
+const DB_NAME = 'ReloopBranchingDB_v5';
 const STORE_NAME = 'study_sessions';
 
 async function initUnlimitedCache() {
@@ -565,16 +565,14 @@ async function generateMultiBranchStep(spokenText, timeRange) {
     return createUnavailableNote(timeRange, 'Caption text is corrupted or not readable');
   }
 
-  const contentType = looksLikeSongLyrics(spokenText) ? 'song lyrics' : 'spoken lecture';
   const systemPrompt = [
     'Create faithful study notes from the supplied transcript only.',
     'Do not infer a story, topic, intent, people, facts, or cause that is not explicitly stated.',
-    `This is ${contentType}. Do not turn it into a lecture or invent a plot, biography, mood, or message.`,
-    'If it is a song, poem, slogan, repetition, or unclear speech, describe only clear repeated words or directly stated content.',
+    'Extract the key technical concepts or explanations taught in this segment.',
     'Do not repeat the same idea. Do not mention yourself, an assistant, the transcript, or these instructions.',
     'Return exactly two short lines in this format: MAIN: ... and DETAIL: ...',
     'MAIN must be one clear sentence of no more than 18 words.',
-    'DETAIL must be a different supporting fact from the text, also no more than 18 words.',
+    'DETAIL must be a supporting concept or mechanism from the text, also no more than 18 words.',
     'If no different supporting fact is clear, write exactly: DETAIL: No separate supporting detail is clear.'
   ].join(' ');
   const userPrompt = `Transcript segment (${timeRange}): "${spokenText}"\n\nWrite MAIN and DETAIL only:`;
@@ -596,9 +594,7 @@ async function generateMultiBranchStep(spokenText, timeRange) {
     console.warn(`Local note generation failed for ${timeRange}; using transcript fallback.`, err);
   }
 
-  const fallback = looksLikeSongLyrics(spokenText)
-    ? buildSongFallback(spokenText)
-    : buildTranscriptFallback(spokenText);
+  const fallback = buildTranscriptFallback(spokenText);
   const primaryNote = bullets[0] || fallback[0];
   const secondaryNote = bullets[1] && !areSimilarNotes(primaryNote, bullets[1])
     ? bullets[1]
@@ -629,40 +625,71 @@ function isCorruptedTranscript(text) {
   return (String(text || '').match(/\uFFFD/g) || []).length > 0;
 }
 
-function looksLikeSongLyrics(text) {
-  const normalized = normalizeNoteText(text).toLowerCase();
-  const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length < 5) return false;
-
-  const counts = new Map();
-  words.forEach((word) => counts.set(word, (counts.get(word) || 0) + 1));
-  const repeatedWords = [...counts.values()].filter((count) => count > 1).length;
-  const repeatedRatio = repeatedWords / counts.size;
-  const shortLinePattern = normalized.split(/[,.!?;]+/).filter(Boolean).length <= 2;
-  return repeatedRatio >= 0.25 || shortLinePattern && words.length >= 10;
-}
-
-function isNonEducationalSession(session) {
-  const titleAndDescription = `${session.title || ''} ${session.description || ''}`.toLowerCase();
-  if (/\b(song|lyrics|music video|official audio|audio track|single|album)\b/.test(titleAndDescription)) {
-    return true;
+async function classifyVideoWithLLM(session) {
+  // 1. Fast metadata filter for explicit music video/track releases
+  const titleAndDesc = `${session.title || ''} ${session.description || ''}`.toLowerCase();
+  if (/\b(official music video|official audio|lyrics video|audio track|full album|vevo)\b/i.test(titleAndDesc)) {
+    return { isEducational: false, reason: 'Identified as official music/audio release' };
   }
 
+  // 2. Extract representative transcript excerpt (first ~30 subtitle lines, up to 900 chars)
   const transcript = session.transcript || [];
-  if (!transcript.length) return false;
-  const sample = transcript
-    .filter((_, index) => index % Math.max(1, Math.floor(transcript.length / 12)) === 0)
-    .slice(0, 12)
-    .map((item) => item.text || '');
-  const lyricLikeSegments = sample.filter((text) => looksLikeSongLyrics(text)).length;
-  const corruptedSegments = sample.filter((text) => isCorruptedTranscript(text)).length;
-  return lyricLikeSegments >= 3 || corruptedSegments >= 2;
+  if (!transcript.length) {
+    return { isEducational: false, reason: 'No transcript available' };
+  }
+
+  const sampleText = transcript
+    .slice(0, 35)
+    .map((item) => item.text || '')
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 900);
+
+  if (sampleText.trim().length < 30) {
+    return { isEducational: false, reason: 'Transcript excerpt too short' };
+  }
+
+  // 3. Prompt local LLM for binary classification (ultra-fast, ~10 tokens)
+  const systemPrompt = 'You are an educational video content classifier. Output ONLY "EDUCATIONAL" or "NON_EDUCATIONAL".';
+  const userPrompt = [
+    'Analyze this YouTube video title and spoken transcript excerpt.',
+    'Determine if the content is EDUCATIONAL (lecture, tutorial, technical explanation, science, math, history, coding, how-to, academic discussion, or informative analysis)',
+    'OR NON_EDUCATIONAL (music songs, music videos, pure entertainment comedy, vlogs, memes, or gaming streams without instructional content).',
+    '',
+    `Title: "${session.title || 'Untitled'}"`,
+    `Transcript Excerpt: "${sampleText}"`,
+    '',
+    'Classification (respond with ONLY one word, "EDUCATIONAL" or "NON_EDUCATIONAL"):'
+  ].join('\n');
+
+  try {
+    diagramStatus.textContent = 'Analyzing content with AI...';
+    const raw = await runLocalLLM(systemPrompt, userPrompt, 15);
+    const reply = String(raw || '').trim().toUpperCase();
+
+    if (reply.includes('NON_EDUCATIONAL') || reply.includes('NON-EDUCATIONAL')) {
+      return { isEducational: false, reason: 'Classified as non-educational by AI' };
+    }
+    if (reply.includes('EDUCATIONAL')) {
+      return { isEducational: true, reason: 'Verified educational lecture by AI' };
+    }
+    return { isEducational: true, reason: 'Defaulted to educational' };
+  } catch (err) {
+    console.warn('Local LLM classification timed out or failed; defaulting to educational:', err);
+    return { isEducational: true, reason: 'Defaulted to educational' };
+  }
 }
 
 function showNonEducationalContentMessage() {
   studyNotes.value = NON_EDUCATIONAL_MESSAGE;
-  diagramStatus.textContent = 'Concept map unavailable for this content';
-  mermaidContainer.innerHTML = `<div class="empty-diagram-msg">${NON_EDUCATIONAL_MESSAGE}</div>`;
+  diagramStatus.textContent = 'Notes unavailable for this content';
+  mermaidContainer.innerHTML = `
+    <div class="empty-diagram-msg" style="max-width: 440px; margin: auto; padding: 48px 20px; text-align: center;">
+      <div style="font-size: 2.2rem; margin-bottom: 12px;">🚫</div>
+      <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">Non-Educational Content</div>
+      <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">${NON_EDUCATIONAL_MESSAGE}</div>
+    </div>
+  `;
 }
 
 function createUnavailableNote(timeRange, message) {
@@ -880,43 +907,9 @@ async function generateFinalSummary(session) {
   }
 }
 
-async function generateAndRenderFinalSummary(session) {
-  if (session.contentType === 'non-educational') {
-    showNonEducationalContentMessage();
-    return;
-  }
-  mermaidContainer.innerHTML = '<div class="empty-diagram-msg">Concept map is not generated from 15-second fragments. Review the final study guide in Notes.</div>';
-  if (session.finalSummaryVersion === FINAL_SUMMARY_VERSION && session.finalSummary) {
-    studyNotes.value = session.finalSummary;
-    diagramStatus.textContent = 'Final summary ready';
-    return;
-  }
-
-  isGenerating = true;
-  try {
-    studyNotes.value = 'Reading the complete lecture and preparing a final study guide...';
-    const finalSummary = await generateFinalSummary(session);
-    const updatedSession = await saveCachedSession(currentVideoId, {
-      finalSummary,
-      finalSummaryVersion: FINAL_SUMMARY_VERSION,
-      steps: {}
-    });
-    studyNotes.value = updatedSession.finalSummary;
-    diagramStatus.textContent = 'Final summary ready';
-  } finally {
-    isGenerating = false;
-  }
-}
-
 async function renderProgressiveUI(session, upToStepIndex) {
   if (session.contentType === 'non-educational') {
     showNonEducationalContentMessage();
-    return;
-  }
-
-  if (session.finalSummary) {
-    studyNotes.value = session.finalSummary;
-    studyNotes.scrollTop = 0;
     return;
   }
 
@@ -927,78 +920,20 @@ async function renderProgressiveUI(session, upToStepIndex) {
     .sort((a, b) => a - b);
 
   if (orderedKeys.length === 0) {
-    studyNotes.value = `ACTIVE LECTURE: ${session.title || 'Session'}\nNotes and concept nodes will populate every ${STEP_INTERVAL_SECONDS} seconds of playback.`;
+    studyNotes.value = `ACTIVE LECTURE: ${session.title || 'Session'}\n\nNotes will auto-populate every ${STEP_INTERVAL_SECONDS} seconds of playback as you watch.`;
   } else {
     studyNotes.value = orderedKeys.map((k) => steps[k].noteBlock).join('\n\n');
     studyNotes.scrollTop = studyNotes.scrollHeight;
   }
 
-  const rootTitle = cleanConceptPhrase(session.title || 'Main Lecture Topic', 4);
-  const lines = [
-    'flowchart TD',
-    `ROOT(["${rootTitle}"])`,
-    'classDef rootStyle fill:#18181b,stroke:#18181b,stroke-width:2px,color:#ffffff,font-weight:bold;',
-    'classDef conceptStyle fill:#ffffff,stroke:#18181b,stroke-width:1.5px,color:#09090b;',
-    'classDef activeStyle fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#14532d;',
-    'classDef detailStyle fill:#f4f4f5,stroke:#a1a1aa,stroke-width:1px,color:#3f3f46;',
-    'class ROOT rootStyle;'
-  ];
-
-  const phaseGroups = {};
-  orderedKeys.forEach((stepKey, idx) => {
-    const phaseNum = Math.floor(idx / 3) + 1;
-    if (!phaseGroups[phaseNum]) phaseGroups[phaseNum] = [];
-    phaseGroups[phaseNum].push({ stepKey, idx, data: steps[stepKey] });
-  });
-
-  let prevConceptId = null;
-
-  Object.keys(phaseGroups).forEach((phaseNum) => {
-    const group = phaseGroups[phaseNum];
-    const startSec = group[0].stepKey * STEP_INTERVAL_SECONDS;
-    const endSec = (group[group.length - 1].stepKey + 1) * STEP_INTERVAL_SECONDS;
-
-    lines.push(`subgraph P${phaseNum} ["Phase ${phaseNum} (${formatTime(startSec)} - ${formatTime(endSec)})"]`);
-    lines.push('direction TB');
-
-    group.forEach(({ stepKey, idx, data }) => {
-      const cId = `C${idx + 1}`;
-      const aId = `A${idx + 1}`;
-      const bId = `B${idx + 1}`;
-      const timeTag = formatTime((stepKey + 1) * STEP_INTERVAL_SECONDS);
-
-      lines.push(`${cId}{{"${idx + 1}. ${data.mainConcept} (${timeTag})"}}`);
-      lines.push(`${aId}["${data.subBranchA}"]`);
-      lines.push(`${bId}(["${data.subBranchB}"])`);
-
-      lines.push(`${cId} -->|Mechanism| ${aId}`);
-      lines.push(`${cId} -->|Detail| ${bId}`);
-
-      const isLatest = idx === orderedKeys.length - 1;
-      lines.push(`class ${cId} ${isLatest ? 'activeStyle' : 'conceptStyle'};`);
-      lines.push(`class ${aId},${bId} detailStyle;`);
-    });
-
-    lines.push('end');
-    lines.push(`style P${phaseNum} fill:#fafafa,stroke:#e4e4e7,stroke-width:1px,color:#52525b`);
-
-    const firstConceptInPhase = `C${group[0].idx + 1}`;
-    lines.push(`ROOT ==>|Section ${phaseNum}| ${firstConceptInPhase}`);
-
-    group.forEach(({ idx }, gIdx) => {
-      const cId = `C${idx + 1}`;
-      if (gIdx > 0) {
-        const prevInGroup = `C${group[gIdx - 1].idx + 1}`;
-        lines.push(`${prevInGroup} ==> ${cId}`);
-        lines.push(`B${group[gIdx - 1].idx + 1} -.-> ${cId}`);
-      } else if (prevConceptId) {
-        lines.push(`${prevConceptId} -.-> ${cId}`);
-      }
-      prevConceptId = cId;
-    });
-  });
-
-  await renderMermaid(lines.join('\n'));
+  // Concept Map: Show clean placeholder as requested ("will be added in future Concept Map: for now simple test")
+  mermaidContainer.innerHTML = `
+    <div class="empty-diagram-msg" style="max-width: 440px; margin: auto; padding: 48px 20px; text-align: center;">
+      <div style="font-size: 2.2rem; margin-bottom: 12px;">🗺️</div>
+      <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">Concept Map Coming Soon</div>
+      <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">The interactive 2D concept map is being upgraded and will be added in a future update. Real-time lecture notes are auto-indexing in the <strong>Notes</strong> panel.</div>
+    </div>
+  `;
 }
 
 async function processStepAtTime(currentSeconds, forceRegenerate = false) {
@@ -1009,9 +944,6 @@ async function processStepAtTime(currentSeconds, forceRegenerate = false) {
   if (!session || !session.transcript) return;
   if (session.contentType === 'non-educational') {
     showNonEducationalContentMessage();
-    return;
-  }
-  if (session.finalSummaryVersion === FINAL_SUMMARY_VERSION && session.finalSummary) {
     return;
   }
 
@@ -1189,15 +1121,23 @@ startStudyBtn.addEventListener('click', async () => {
   if (session.noteGenerationVersion !== NOTE_GENERATION_VERSION) {
     session = await saveCachedSession(videoId, {
       steps: {},
-      finalSummary: '',
-      finalSummaryVersion: 0,
       noteGenerationVersion: NOTE_GENERATION_VERSION
     });
   }
 
-  const contentType = isNonEducationalSession(session) ? 'non-educational' : 'educational';
-  if (session.contentType !== contentType) {
-    session = await saveCachedSession(videoId, { contentType });
+  const mode = localEngineSelect.value;
+  if (mode !== 'ollama') {
+    ensureWebLLMLoaded(MODELS[mode] || MODELS['webllm-fast']).catch(() => {});
+  }
+
+  // LLM Educational Content Classifier
+  if (!session.contentType || session.classificationVersion !== CLASSIFICATION_VERSION) {
+    const classification = await classifyVideoWithLLM(session);
+    const contentType = classification.isEducational ? 'educational' : 'non-educational';
+    session = await saveCachedSession(videoId, {
+      contentType,
+      classificationVersion: CLASSIFICATION_VERSION
+    });
   }
 
   currentTimestamps = session.timestamps || [];
@@ -1211,12 +1151,9 @@ startStudyBtn.addEventListener('click', async () => {
   }
 
   await renderProgressiveUI(session, -1);
-  await generateAndRenderFinalSummary(session);
-
-  const mode = localEngineSelect.value;
-  if (session.contentType !== 'non-educational' && !session.finalSummary && mode !== 'ollama') {
-    ensureWebLLMLoaded(MODELS[mode] || MODELS['webllm-fast']).catch(() => {});
-  }
+  diagramStatus.textContent = session.contentType === 'non-educational'
+    ? 'Notes unavailable for this content'
+    : `Awaiting segment 0:00 - 0:${STEP_INTERVAL_SECONDS}`;
 });
 
 refreshDiagramBtn.addEventListener('click', async () => {
