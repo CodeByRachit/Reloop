@@ -30,6 +30,9 @@ const MODELS = {
 };
 
 const STEP_INTERVAL_SECONDS = 15;
+const NOTE_GENERATION_VERSION = 5;
+const FINAL_SUMMARY_VERSION = 5;
+const NON_EDUCATIONAL_MESSAGE = 'This does not appear to be an educational video. Notes and the concept map are unavailable for this content.';
 const MIN_ZOOM = 0.1; // 10%
 const MAX_ZOOM = 8.0; // 800%
 
@@ -459,7 +462,7 @@ async function ensureWebLLMLoaded(targetModelId) {
   return loadingPromise;
 }
 
-async function runLocalLLM(systemPrompt, userPrompt) {
+async function runLocalLLM(systemPrompt, userPrompt, maxTokens = 140) {
   const mode = localEngineSelect.value;
 
   if (mode === 'ollama') {
@@ -480,7 +483,7 @@ async function runLocalLLM(systemPrompt, userPrompt) {
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.1,
-      max_tokens: 140
+      max_tokens: maxTokens
     });
     return reply.choices[0]?.message?.content || '';
   }
@@ -518,7 +521,7 @@ function cleanConceptPhrase(rawText, maxWords = 5) {
   }
 
   let words = text
-    .replace(/[^a-zA-Z0-9 -]/g, ' ')
+    .replace(/[^\p{L}\p{N} -]/gu, ' ')
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, maxWords);
@@ -558,40 +561,365 @@ function getStepTranscript(session, stepIndex) {
 }
 
 async function generateMultiBranchStep(spokenText, timeRange) {
-  const systemPrompt =
-    'Extract key technical points directly from the text. Never mention yourself or say "study assistant". Output 2 short bullet points starting with "- ".';
-  const userPrompt = `Text (${timeRange}): "${spokenText}"\n\nWrite 2 concise technical bullet points summarizing the main concept and how it works:`;
+  if (isCorruptedTranscript(spokenText)) {
+    return createUnavailableNote(timeRange, 'Caption text is corrupted or not readable');
+  }
+
+  const contentType = looksLikeSongLyrics(spokenText) ? 'song lyrics' : 'spoken lecture';
+  const systemPrompt = [
+    'Create faithful study notes from the supplied transcript only.',
+    'Do not infer a story, topic, intent, people, facts, or cause that is not explicitly stated.',
+    `This is ${contentType}. Do not turn it into a lecture or invent a plot, biography, mood, or message.`,
+    'If it is a song, poem, slogan, repetition, or unclear speech, describe only clear repeated words or directly stated content.',
+    'Do not repeat the same idea. Do not mention yourself, an assistant, the transcript, or these instructions.',
+    'Return exactly two short lines in this format: MAIN: ... and DETAIL: ...',
+    'MAIN must be one clear sentence of no more than 18 words.',
+    'DETAIL must be a different supporting fact from the text, also no more than 18 words.',
+    'If no different supporting fact is clear, write exactly: DETAIL: No separate supporting detail is clear.'
+  ].join(' ');
+  const userPrompt = `Transcript segment (${timeRange}): "${spokenText}"\n\nWrite MAIN and DETAIL only:`;
 
   let bullets = [];
   try {
     const raw = await runLocalLLM(systemPrompt, userPrompt);
-    bullets = raw
+    const parsed = raw
       .split('\n')
-      .map((l) => l.replace(/^[-*•#\d.]+\s*/, '').replace(/"/g, '').trim())
-      .filter((l) => l.length > 10 && !/study assistant/i.test(l));
-  } catch {}
+      .map((line) => line.replace(/^[-*•#\d.]+\s*/, '').replace(/"/g, '').trim())
+      .filter(Boolean);
+    const main = parsed.find((line) => /^main\s*:/i.test(line));
+    const detail = parsed.find((line) => /^detail\s*:/i.test(line));
+    bullets = [main, detail]
+      .filter(Boolean)
+      .map((line) => compactNote(line.replace(/^[^:]+:\s*/i, '')))
+      .filter(isUsableNote);
+  } catch (err) {
+    console.warn(`Local note generation failed for ${timeRange}; using transcript fallback.`, err);
+  }
 
-  const clauses = spokenText
-    .split(/[.,;?!]|(?:\band\b|\bbecause\b|\bwhich\b|\bwhere\b)/i)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 12);
-
-  const primaryNote = bullets[0] || clauses[0] || spokenText.slice(0, 90);
-  const secondaryNote = bullets[1] || clauses[1] || clauses[0] || spokenText.slice(30, 110);
+  const fallback = looksLikeSongLyrics(spokenText)
+    ? buildSongFallback(spokenText)
+    : buildTranscriptFallback(spokenText);
+  const primaryNote = bullets[0] || fallback[0];
+  const secondaryNote = bullets[1] && !areSimilarNotes(primaryNote, bullets[1])
+    ? bullets[1]
+    : fallback[1];
 
   const mainConcept = cleanConceptPhrase(primaryNote, 4);
-  const subBranchA = cleanConceptPhrase(primaryNote.split(/\s+/).slice(3).join(' ') || clauses[0] || primaryNote, 5);
+  const subBranchA = cleanConceptPhrase(primaryNote, 5);
   const subBranchB = cleanConceptPhrase(secondaryNote, 5);
 
   return {
     noteBlock: `[${timeRange}] ${mainConcept.toUpperCase()}\n- Concept: ${primaryNote}\n- Detail: ${secondaryNote}`,
     mainConcept,
-    subBranchA: subBranchA !== mainConcept ? subBranchA : cleanConceptPhrase(clauses[1] || 'Core Mechanism', 4),
-    subBranchB: subBranchB !== subBranchA ? subBranchB : cleanConceptPhrase(clauses[2] || 'Key Outcome', 4)
+    subBranchA: subBranchA !== mainConcept ? subBranchA : 'Main point',
+    subBranchB: subBranchB !== subBranchA ? subBranchB : 'Supporting detail'
   };
 }
 
+function normalizeNoteText(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^(concept|detail|summary|main idea|supporting detail|main|first line|second line)\s*:\s*/i, '')
+    .replace(/^(note|line)\s*\d+\s*[:.)-]\s*/i, '')
+    .trim()
+    .replace(/[.!?]+$/, '');
+}
+
+function isCorruptedTranscript(text) {
+  return (String(text || '').match(/\uFFFD/g) || []).length > 0;
+}
+
+function looksLikeSongLyrics(text) {
+  const normalized = normalizeNoteText(text).toLowerCase();
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length < 5) return false;
+
+  const counts = new Map();
+  words.forEach((word) => counts.set(word, (counts.get(word) || 0) + 1));
+  const repeatedWords = [...counts.values()].filter((count) => count > 1).length;
+  const repeatedRatio = repeatedWords / counts.size;
+  const shortLinePattern = normalized.split(/[,.!?;]+/).filter(Boolean).length <= 2;
+  return repeatedRatio >= 0.25 || shortLinePattern && words.length >= 10;
+}
+
+function isNonEducationalSession(session) {
+  const titleAndDescription = `${session.title || ''} ${session.description || ''}`.toLowerCase();
+  if (/\b(song|lyrics|music video|official audio|audio track|single|album)\b/.test(titleAndDescription)) {
+    return true;
+  }
+
+  const transcript = session.transcript || [];
+  if (!transcript.length) return false;
+  const sample = transcript
+    .filter((_, index) => index % Math.max(1, Math.floor(transcript.length / 12)) === 0)
+    .slice(0, 12)
+    .map((item) => item.text || '');
+  const lyricLikeSegments = sample.filter((text) => looksLikeSongLyrics(text)).length;
+  const corruptedSegments = sample.filter((text) => isCorruptedTranscript(text)).length;
+  return lyricLikeSegments >= 3 || corruptedSegments >= 2;
+}
+
+function showNonEducationalContentMessage() {
+  studyNotes.value = NON_EDUCATIONAL_MESSAGE;
+  diagramStatus.textContent = 'Concept map unavailable for this content';
+  mermaidContainer.innerHTML = `<div class="empty-diagram-msg">${NON_EDUCATIONAL_MESSAGE}</div>`;
+}
+
+function createUnavailableNote(timeRange, message) {
+  return {
+    noteBlock: `[${timeRange}] CAPTIONS UNAVAILABLE\n- Concept: ${message}\n- Detail: No reliable note was generated from this segment`,
+    mainConcept: 'Captions unavailable',
+    subBranchA: 'Use clearer captions',
+    subBranchB: 'No reliable note generated'
+  };
+}
+
+function compactNote(text, maxWords = 18) {
+  const words = normalizeNoteText(text).split(/\s+/).filter(Boolean);
+  return words.slice(0, maxWords).join(' ').replace(/[,:;]$/, '');
+}
+
+function isUsableNote(text) {
+  const note = compactNote(text);
+  if (note.length < 12 || note.split(/\s+/).length > 18) return false;
+  if (/study assistant|as an ai|the transcript|this segment|the user asked/i.test(note)) return false;
+
+  const words = note.toLowerCase().split(/\s+/);
+  const uniqueWords = new Set(words);
+  const repeatedWordRatio = words.length ? 1 - uniqueWords.size / words.length : 1;
+  return repeatedWordRatio < 0.45;
+}
+
+function areSimilarNotes(first, second) {
+  const firstWords = new Set(compactNote(first).toLowerCase().split(/\s+/));
+  const secondWords = compactNote(second).toLowerCase().split(/\s+/);
+  if (!secondWords.length) return true;
+  const sharedWords = secondWords.filter((word) => firstWords.has(word)).length;
+  return sharedWords / secondWords.length >= 0.65;
+}
+
+function buildTranscriptFallback(spokenText) {
+  const sentences = spokenText
+    .split(/(?<=[.!?])\s+|[;,]+|\s+(?=(?:and|but|while|because|when|what if)\b)/i)
+    .map((sentence) => compactNote(sentence))
+    .filter((sentence) => sentence.length >= 12);
+
+  const first = sentences[0] || compactNote(spokenText);
+  const second = sentences.find((sentence) => sentence !== first && !areSimilarNotes(first, sentence)) ||
+    'No separate supporting detail is clear';
+
+  return [
+    first,
+    second
+  ];
+}
+
+function buildSongFallback(spokenText) {
+  const words = normalizeNoteText(spokenText).split(/\s+/).filter(Boolean);
+  const counts = new Map();
+  words.forEach((word) => counts.set(word, (counts.get(word) || 0) + 1));
+  const repeated = [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([word]) => word)
+    .join(', ');
+
+  return [
+    repeated ? `Lyrics repeat the words or phrases: ${repeated}` : 'This segment contains song lyrics',
+    'The captions do not provide enough context for a reliable meaning summary'
+  ];
+}
+
+function getFullTranscriptText(session) {
+  return (session.transcript || [])
+    .slice()
+    .sort((a, b) => a.offset - b.offset)
+    .map((item) => item.text || '')
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitTranscriptIntoChunks(text, maxCharacters = 4500) {
+  const sentences = text.split(/(?<=[.!?])\s+|(?<=[,;])\s+/).filter(Boolean);
+  const chunks = [];
+  let current = '';
+
+  for (const sentence of sentences) {
+    if (current && current.length + sentence.length + 1 > maxCharacters) {
+      chunks.push(current);
+      current = '';
+    }
+    current += `${current ? ' ' : ''}${sentence}`;
+  }
+  if (current) chunks.push(current);
+  return chunks.length ? chunks : [text.slice(0, maxCharacters)];
+}
+
+function deduplicateTextBlocks(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const result = [];
+  const seen = new Set();
+
+  for (const line of lines) {
+    const key = line.toLowerCase().replace(/[`*_#:.!?|]/g, '').replace(/\s+/g, ' ').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(line);
+  }
+
+  return result.join('\n\n');
+}
+
+function cleanStudyGuide(text) {
+  const cleaned = deduplicateTextBlocks(String(text || '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/<tree>[\s\S]*?<\/tree>/gi, '')
+    .replace(/<node\b[^>]*>[\s\S]*?<\/node>/gi, '')
+    .split(/\n\s*(?:in summary|summary|conclusion)\s*:?\s*/i)[0]
+    .trim());
+  const lines = cleaned.split(/\r?\n/);
+  const result = [];
+  const childCountVariantPattern = /binary search tree with (?:\d+|n(?:-\d+)?) children/i;
+  const childCountVariants = lines.filter((line) => childCountVariantPattern.test(line)).length;
+
+  for (const line of lines) {
+    if (childCountVariants > 1 && childCountVariantPattern.test(line)) {
+      continue;
+    }
+    result.push(line);
+  }
+
+  const output = result.join('\n').trim();
+  if (childCountVariants > 1) {
+    return `${output}\n\n> The lecture does not support a separate list of binary-tree types for every possible child count.`;
+  }
+  return output;
+}
+
+async function generateFinalSummary(session) {
+  const transcript = getFullTranscriptText(session);
+  if (!transcript || isCorruptedTranscript(transcript)) {
+    return 'A complete summary could not be created because the video captions are missing or corrupted.';
+  }
+
+  const chunks = splitTranscriptIntoChunks(transcript);
+  const chunkSummaries = [];
+  const chunkPrompt = [
+    'You are extracting a concept inventory from one part of an educational lecture.',
+    'Extract every distinct concept, definition, type, property, relationship, example, or comparison explicitly taught.',
+    'Ignore greetings, filler, repeated words, and incomplete caption fragments.',
+    'Do not merge different concepts and do not invent facts or conclusions.',
+    'If a definition is unclear or conflicts with standard terminology, mark it as unclear instead of guessing.',
+    'Do not enumerate arbitrary child counts or invent names such as B2, B3, B10, or Bn unless the lecture explicitly teaches them as named concepts.',
+    'Use one line per concept in this exact format: CONCEPT | DEFINITION OR EXPLANATION | EXAMPLE OR RELATIONSHIP.',
+    'Keep each line factual and specific. Do not write an introduction or conclusion.'
+  ].join(' ');
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    diagramStatus.textContent = `Reading lecture section ${index + 1} of ${chunks.length}...`;
+    try {
+      const summary = await runLocalLLM(
+        chunkPrompt,
+        `Lecture section ${index + 1}:\n${chunks[index]}\n\nWrite the section summary:`,
+        220
+      );
+      if (summary.trim()) chunkSummaries.push(deduplicateTextBlocks(summary));
+    } catch (err) {
+      console.warn(`Lecture section ${index + 1} could not be summarized.`, err);
+    }
+  }
+
+  if (!chunkSummaries.length) {
+    return 'A complete summary could not be created because the local AI engine is unavailable.';
+  }
+
+  const finalPrompt = [
+    'Create a complete, detailed study guide from the concept inventory below.',
+    'Cover every distinct named concept in the inventory; do not omit smaller concepts.',
+    'Use a clear title followed by one Markdown heading per concept.',
+    'Under each heading, write 2 to 4 complete sentences explaining the definition, properties, relationships, and examples.',
+    'Correct obvious wording mistakes and remove filler, but do not add facts that are not supported by the inventory.',
+    'If two entries conflict, explain the distinction instead of combining them.',
+    'Do not repeat a concept. Do not write an abstract, introduction, conclusion, or an "In summary" paragraph.',
+    'Do not generate long lists of hypothetical variants, child counts, or numbered types.',
+    'Never output XML, HTML, Mermaid, pseudocode, or a made-up tree representation.',
+    'Do not mention transcripts, AI, sections, or the summarization process.'
+  ].join(' ');
+  const combined = deduplicateTextBlocks(chunkSummaries.join('\n\n'));
+
+  try {
+    diagramStatus.textContent = 'Writing final lecture summary...';
+    const draft = await runLocalLLM(
+      finalPrompt,
+      `Lecture section summaries:\n${combined}\n\nWrite the final study guide:`,
+      900
+    );
+    const reviewPrompt = [
+      'Review the draft study guide against the supplied concept inventory.',
+      'Return the complete corrected study guide only.',
+      'Keep every supported concept and explanation.',
+      'Remove unsupported claims, invented examples, XML or code, repeated headings, and abstract or summary paragraphs.',
+      'Remove any invented list of child-count variants such as B2, B3, B10, Bn, or similar names unless directly supported by the inventory.',
+      'If a statement is not supported or is ambiguous, say "The lecture does not make this detail clear."',
+      'Do not shorten the guide into a general overview. Keep the guide under 1200 words.'
+    ].join(' ');
+    const reviewed = await runLocalLLM(
+      reviewPrompt,
+      `Concept inventory:\n${combined}\n\nDraft study guide:\n${draft}\n\nReturn the corrected study guide:`,
+      1000
+    );
+    return cleanStudyGuide(reviewed || draft);
+  } catch (err) {
+    console.warn('Final lecture summary could not be generated.', err);
+    return cleanStudyGuide(chunkSummaries.join('\n\n'));
+  }
+}
+
+async function generateAndRenderFinalSummary(session) {
+  if (session.contentType === 'non-educational') {
+    showNonEducationalContentMessage();
+    return;
+  }
+  mermaidContainer.innerHTML = '<div class="empty-diagram-msg">Concept map is not generated from 15-second fragments. Review the final study guide in Notes.</div>';
+  if (session.finalSummaryVersion === FINAL_SUMMARY_VERSION && session.finalSummary) {
+    studyNotes.value = session.finalSummary;
+    diagramStatus.textContent = 'Final summary ready';
+    return;
+  }
+
+  isGenerating = true;
+  try {
+    studyNotes.value = 'Reading the complete lecture and preparing a final study guide...';
+    const finalSummary = await generateFinalSummary(session);
+    const updatedSession = await saveCachedSession(currentVideoId, {
+      finalSummary,
+      finalSummaryVersion: FINAL_SUMMARY_VERSION,
+      steps: {}
+    });
+    studyNotes.value = updatedSession.finalSummary;
+    diagramStatus.textContent = 'Final summary ready';
+  } finally {
+    isGenerating = false;
+  }
+}
+
 async function renderProgressiveUI(session, upToStepIndex) {
+  if (session.contentType === 'non-educational') {
+    showNonEducationalContentMessage();
+    return;
+  }
+
+  if (session.finalSummary) {
+    studyNotes.value = session.finalSummary;
+    studyNotes.scrollTop = 0;
+    return;
+  }
+
   const steps = session.steps || {};
   const orderedKeys = Object.keys(steps)
     .map((k) => parseInt(k, 10))
@@ -679,6 +1007,13 @@ async function processStepAtTime(currentSeconds, forceRegenerate = false) {
 
   const session = await getCachedSession(currentVideoId);
   if (!session || !session.transcript) return;
+  if (session.contentType === 'non-educational') {
+    showNonEducationalContentMessage();
+    return;
+  }
+  if (session.finalSummaryVersion === FINAL_SUMMARY_VERSION && session.finalSummary) {
+    return;
+  }
 
   const completedStepIndex = forceRegenerate
     ? Math.floor(currentSeconds / STEP_INTERVAL_SECONDS)
@@ -845,9 +1180,24 @@ startStudyBtn.addEventListener('click', async () => {
       description: data.description || '',
       transcript: data.transcript,
       steps: session?.steps || {},
+      noteGenerationVersion: NOTE_GENERATION_VERSION,
       timestamps: session?.timestamps || []
     });
     await renderCachedVideoPills();
+  }
+
+  if (session.noteGenerationVersion !== NOTE_GENERATION_VERSION) {
+    session = await saveCachedSession(videoId, {
+      steps: {},
+      finalSummary: '',
+      finalSummaryVersion: 0,
+      noteGenerationVersion: NOTE_GENERATION_VERSION
+    });
+  }
+
+  const contentType = isNonEducationalSession(session) ? 'non-educational' : 'educational';
+  if (session.contentType !== contentType) {
+    session = await saveCachedSession(videoId, { contentType });
   }
 
   currentTimestamps = session.timestamps || [];
@@ -861,10 +1211,10 @@ startStudyBtn.addEventListener('click', async () => {
   }
 
   await renderProgressiveUI(session, -1);
-  diagramStatus.textContent = `Awaiting segment 0:00 - 0:${STEP_INTERVAL_SECONDS}`;
+  await generateAndRenderFinalSummary(session);
 
   const mode = localEngineSelect.value;
-  if (mode !== 'ollama') {
+  if (session.contentType !== 'non-educational' && !session.finalSummary && mode !== 'ollama') {
     ensureWebLLMLoaded(MODELS[mode] || MODELS['webllm-fast']).catch(() => {});
   }
 });
@@ -1361,5 +1711,3 @@ if (chapterTrackWrapper) {
     }
   });
 }
-
-
