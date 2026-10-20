@@ -2,7 +2,7 @@
 
 > Distraction-free YouTube study workspace with local AI note indexing and progressive concept mapping.
 
-Reloop turns YouTube video lectures into an active, distraction-free study station. It extracts real YouTube video captions, summarizes 15-second lecture segments in real time using local models (WebLLM via WebGPU or local Ollama), and progressively generates a multi-branch 2D concept map using Mermaid.js.
+Reloop turns YouTube video lectures into an active, distraction-free study station. Its landing page at `/` accepts a YouTube link and embeds the actual study workspace at `/focus` as a live demo. The workspace extracts YouTube captions, summarizes 15-second lecture segments with local models (WebLLM via WebGPU or local Ollama), and progressively generates a multi-branch 2D concept map using Mermaid.js.
 
 ---
 
@@ -26,7 +26,11 @@ Reloop/
 ├── .gitignore             # Leakage prevention & dependency exclusion
 ├── README.md              # Project documentation
 └── public/
-    ├── index.html         # Main workspace layout
+    ├── landing.html       # Public landing page
+    ├── landing.css        # Landing page styling
+    ├── landing.js         # Landing page interactions
+    ├── youtube.js         # Shared YouTube URL parsing and normalization
+    ├── index.html         # Focus-session workspace (served at /focus)
     ├── style.css          # Minimalist Light Theme styles
     └── app.js             # Client logic (WebLLM, YouTube player, Mermaid canvas)
 ```
@@ -59,7 +63,7 @@ Reloop/
    npm start
    ```
 
-4. Open your browser and navigate to:
+4. Open your browser and navigate to the landing page:
    ```
    http://localhost:3000
    ```
@@ -70,10 +74,11 @@ Reloop/
 
 1. Select your preferred local engine from the toolbar (`SmolLM2 360M`, `Llama 3.2 1B`, or `Local Ollama`).
 2. Paste any YouTube lecture URL that has captions/subtitles enabled.
-3. Click **Enter Focus Session** to launch fullscreen mode.
-4. Watch the lecture—Reloop will automatically build timestamped notes and grow the concept map step-by-step.
-5. Use the controls below the video to play or pause, seek, skip 10 seconds, adjust volume and playback speed, toggle captions, or enter fullscreen.
-6. Use the canvas controls (`+`, `-`, `100%`) to zoom and navigate the concept diagram.
+3. Click **Start learning**. The link is validated and the video ID is passed to the focus workspace, which begins loading the session.
+4. The focus workspace attempts to enter fullscreen; if the browser blocks that request, continue using the playback controls or enter fullscreen from the controls.
+5. Watch the lecture—Reloop will automatically build timestamped notes and grow the concept map step-by-step.
+6. Use the controls below the video to play or pause, seek, skip 10 seconds, adjust volume and playback speed, toggle captions, or enter fullscreen.
+7. Use the canvas controls (`+`, `-`, `100%`) to zoom and navigate the concept diagram.
 
 ---
 
