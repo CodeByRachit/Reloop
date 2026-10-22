@@ -1,4 +1,5 @@
 import * as webllm from 'https://esm.run/@mlc-ai/web-llm';
+import { extractYouTubeVideoId, isYouTubeVideoId, normalizeYouTubeUrl } from './youtube.js';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -230,9 +231,7 @@ localEngineSelect.addEventListener('change', () => {
 });
 
 function extractVideoId(url) {
-  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-  const match = url.match(regExp);
-  return match ? match[1] : null;
+  return extractYouTubeVideoId(url);
 }
 
 function formatTime(sec) {
@@ -1155,6 +1154,16 @@ startStudyBtn.addEventListener('click', async () => {
     ? 'Notes unavailable for this content'
     : `Awaiting segment 0:00 - 0:${STEP_INTERVAL_SECONDS}`;
 });
+
+const requestedVideoId = new URLSearchParams(window.location.search).get('videoId');
+if (requestedVideoId) {
+  if (isYouTubeVideoId(requestedVideoId)) {
+    ytUrlInput.value = normalizeYouTubeUrl(requestedVideoId);
+    startStudyBtn.click();
+  } else {
+    alert('That YouTube video link is invalid. Enter a valid link to start a session.');
+  }
+}
 
 refreshDiagramBtn.addEventListener('click', async () => {
   if (!currentVideoId || !player || typeof player.getCurrentTime !== 'function') return;
