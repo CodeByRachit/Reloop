@@ -48,8 +48,6 @@ let isStudying = false;
 let isGenerating = false;
 let focusSeconds = 0;
 let lastCompletedStep = -1;
-let isSeeking = false;
-let captionsEnabled = false;
 
 // Pan & Zoom State
 let currentZoom = 1.0;
@@ -75,25 +73,6 @@ const cacheBadge = document.getElementById('cacheBadge');
 const focusTimer = document.getElementById('focusTimer');
 const videoStartPlaceholder = document.getElementById('videoStartPlaceholder');
 const cachedSessionsList = document.getElementById('cachedSessionsList');
-const playbackControls = document.querySelectorAll('.playback-control');
-const playPauseBtn = document.getElementById('playPauseBtn');
-const skipBackBtn = document.getElementById('skipBackBtn');
-const skipForwardBtn = document.getElementById('skipForwardBtn');
-const playbackSeek = document.getElementById('playbackSeek');
-const playbackCurrentTime = document.getElementById('playbackCurrentTime');
-const playbackDuration = document.getElementById('playbackDuration');
-const playbackSpeed = document.getElementById('playbackSpeed');
-const muteBtn = document.getElementById('muteBtn');
-const playbackVolume = document.getElementById('playbackVolume');
-const captionsBtn = document.getElementById('captionsBtn');
-const fullscreenBtn = document.getElementById('fullscreenBtn');
-const videoPanel = document.querySelector('.video-panel');
-const playIcon = playPauseBtn.querySelector('.play-icon');
-const pauseIcon = playPauseBtn.querySelector('.pause-icon');
-const volumeOnIcon = muteBtn.querySelector('.volume-on-icon');
-const volumeOffIcon = muteBtn.querySelector('.volume-off-icon');
-const fullscreenEnterIcon = fullscreenBtn.querySelector('.fullscreen-enter-icon');
-const fullscreenExitIcon = fullscreenBtn.querySelector('.fullscreen-exit-icon');
 
 // Topbar Toggles & Side Inspector Elements
 const toggleNotesBtn = document.getElementById('toggleNotesBtn');
@@ -246,19 +225,17 @@ function initYouTubePlayer() {
     player = new window.YT.Player('player', {
       height: '100%',
       width: '100%',
-      playerVars: { rel: 0, modestbranding: 1 },
+      playerVars: { controls: 1, fs: 1, cc_load_policy: 0, rel: 0 },
       events: {
         onReady: () => {
           playerReady = true;
           if (currentVideoId) {
             loadStudyVideo(currentVideoId);
           }
-          updatePlaybackControlAvailability();
-          updatePlaybackControls();
+          updatePlaybackProgress();
         },
         onStateChange: () => {
-          updatePlaybackSpeedOptions();
-          updatePlaybackControls();
+          updatePlaybackProgress();
         }
       }
     });
@@ -269,62 +246,24 @@ else window.onYouTubeIframeAPIReady = initYouTubePlayer;
 
 function loadStudyVideo(videoId) {
   if (!player) return;
-  if (captionsEnabled) player.unloadModule('captions');
-  captionsEnabled = false;
-  captionsBtn.textContent = 'CC Off';
-  captionsBtn.setAttribute('aria-pressed', 'false');
-  playbackSeek.value = '0';
-  playbackSeek.max = '0';
-  playbackCurrentTime.textContent = '0:00';
-  playbackDuration.textContent = '0:00';
   player.loadVideoById(videoId);
   hasActiveVideo = true;
-  updatePlaybackControlAvailability();
-  updatePlaybackSpeedOptions();
+  updatePlaybackProgress();
 }
 
-function updatePlaybackControlAvailability() {
-  const enabled = playerReady && hasActiveVideo;
-  playbackControls.forEach((control) => {
-    control.disabled = !enabled;
-  });
-}
-
-function updatePlaybackSpeedOptions() {
-  if (!player || !hasActiveVideo || typeof player.getAvailablePlaybackRates !== 'function') return;
-
-  const availableRates = player.getAvailablePlaybackRates();
-  if (!availableRates || availableRates.length === 0) return;
-
-  const currentRate = player.getPlaybackRate();
-  playbackSpeed.replaceChildren(
-    ...availableRates.map((rate) => {
-      const option = document.createElement('option');
-      option.value = String(rate);
-      option.textContent = `${rate}×`;
-      return option;
-    })
-  );
-  playbackSpeed.value = String(currentRate);
-}
-
-function updatePlaybackControls() {
+function updatePlaybackProgress() {
   if (!player || !playerReady || !hasActiveVideo) return;
 
   const currentTime = player.getCurrentTime();
   const duration = player.getDuration();
   if (Number.isFinite(currentTime)) {
-    playbackCurrentTime.textContent = formatTime(currentTime);
     if (quickStampTimePreview) quickStampTimePreview.textContent = formatTime(currentTime);
     if (formStampTimeTag && document.activeElement !== timestampTitleInput) {
       formStampTimeTag.textContent = formatTime(currentTime);
     }
     highlightActiveTimestamp(currentTime);
-    if (!isSeeking) playbackSeek.value = String(currentTime);
   }
   if (Number.isFinite(duration) && duration > 0) {
-    playbackSeek.max = String(duration);
-    playbackDuration.textContent = formatTime(duration);
     if (Math.abs(duration - lastRenderedDuration) > 1 && videoChapters.length > 0) {
       lastRenderedDuration = duration;
       renderChaptersTimeline(duration);
@@ -334,103 +273,8 @@ function updatePlaybackControls() {
   if (Number.isFinite(currentTime) && Number.isFinite(duration) && duration > 0) {
     updateChaptersProgress(currentTime, duration);
   }
-
-  const isPlaying = player.getPlayerState() === 1;
-  playPauseBtn.setAttribute('aria-label', isPlaying ? 'Pause video' : 'Play video');
-  playPauseBtn.title = isPlaying ? 'Pause' : 'Play';
-  playIcon.classList.toggle('hidden', isPlaying);
-  pauseIcon.classList.toggle('hidden', !isPlaying);
-
-  const isMuted = player.isMuted();
-  muteBtn.setAttribute('aria-label', isMuted ? 'Unmute video' : 'Mute video');
-  muteBtn.title = isMuted ? 'Unmute' : 'Mute';
-  volumeOnIcon.classList.toggle('hidden', isMuted);
-  volumeOffIcon.classList.toggle('hidden', !isMuted);
-  playbackVolume.value = String(isMuted ? 0 : player.getVolume());
-
-  const currentRate = player.getPlaybackRate();
-  if ([...playbackSpeed.options].some((option) => Number(option.value) === currentRate)) {
-    playbackSpeed.value = String(currentRate);
-  }
 }
-
-playPauseBtn.addEventListener('click', () => {
-  if (!player) return;
-  if (player.getPlayerState() === 1) player.pauseVideo();
-  else player.playVideo();
-});
-
-skipBackBtn.addEventListener('click', () => {
-  if (!player) return;
-  player.seekTo(Math.max(0, player.getCurrentTime() - 10), true);
-});
-
-skipForwardBtn.addEventListener('click', () => {
-  if (!player) return;
-  const duration = player.getDuration();
-  const target = player.getCurrentTime() + 10;
-  player.seekTo(Number.isFinite(duration) && duration > 0 ? Math.min(duration, target) : target, true);
-});
-
-playbackSeek.addEventListener('input', () => {
-  isSeeking = true;
-  playbackCurrentTime.textContent = formatTime(Number(playbackSeek.value));
-});
-playbackSeek.addEventListener('change', () => {
-  if (player) player.seekTo(Number(playbackSeek.value), true);
-  isSeeking = false;
-});
-
-playbackSpeed.addEventListener('change', () => {
-  if (player) player.setPlaybackRate(Number(playbackSpeed.value));
-});
-
-muteBtn.addEventListener('click', () => {
-  if (!player) return;
-  if (player.isMuted()) player.unMute();
-  else player.mute();
-  updatePlaybackControls();
-});
-
-playbackVolume.addEventListener('input', () => {
-  if (!player) return;
-  const volume = Number(playbackVolume.value);
-  player.setVolume(volume);
-  if (volume === 0) player.mute();
-  else if (player.isMuted()) player.unMute();
-  updatePlaybackControls();
-});
-
-captionsBtn.addEventListener('click', () => {
-  if (!player) return;
-  captionsEnabled = !captionsEnabled;
-  if (captionsEnabled) player.loadModule('captions');
-  else player.unloadModule('captions');
-  captionsBtn.setAttribute('aria-label', captionsEnabled ? 'Turn captions off' : 'Turn captions on');
-  captionsBtn.setAttribute('aria-pressed', String(captionsEnabled));
-});
-
-fullscreenBtn.addEventListener('click', async () => {
-  try {
-    if (document.fullscreenElement === videoPanel) {
-      await document.exitFullscreen();
-    } else {
-      await videoPanel.requestFullscreen();
-    }
-  } catch (err) {
-    console.error('Unable to change video fullscreen mode:', err);
-  }
-});
-
-document.addEventListener('fullscreenchange', () => {
-  const isFullscreen = document.fullscreenElement === videoPanel;
-  fullscreenBtn.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
-  fullscreenBtn.title = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
-  fullscreenEnterIcon.classList.toggle('hidden', isFullscreen);
-  fullscreenExitIcon.classList.toggle('hidden', !isFullscreen);
-});
-
-setInterval(updatePlaybackControls, 250);
+setInterval(updatePlaybackProgress, 250);
 
 // ============================================================================
 // 2. LOCAL AI ENGINE
@@ -1083,10 +927,10 @@ startStudyBtn.addEventListener('click', async () => {
 
   currentVideoId = videoId;
   hasActiveVideo = false;
-  updatePlaybackControlAvailability();
   isStudying = true;
   lastCompletedStep = -1;
 
+  document.querySelector('.video-wrapper').classList.remove('is-standby');
   videoStartPlaceholder.classList.add('hidden');
 
   if (!document.fullscreenElement) {
@@ -1279,8 +1123,17 @@ function renderTimestampsList() {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const idToDelete = btn.dataset.deleteId;
+      const deletedIndex = currentTimestamps.findIndex((stamp) => stamp.id === idToDelete);
+      const outerScrollContainer = timestampsList.closest('.video-scroll-container');
+      const outerScrollTop = outerScrollContainer ? outerScrollContainer.scrollTop : 0;
+      const listScrollTop = timestampsList.scrollTop;
       currentTimestamps = currentTimestamps.filter((s) => s.id !== idToDelete);
       renderTimestampsList();
+      timestampsList.scrollTop = listScrollTop;
+      if (outerScrollContainer) outerScrollContainer.scrollTop = outerScrollTop;
+      const remainingDeleteButtons = timestampsList.querySelectorAll('.timestamp-delete-btn');
+      remainingDeleteButtons[Math.min(deletedIndex, remainingDeleteButtons.length - 1)]
+        ?.focus({ preventScroll: true });
       if (currentVideoId) {
         await saveCachedSession(currentVideoId, { timestamps: currentTimestamps });
       }
