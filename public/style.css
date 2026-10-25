@@ -265,6 +265,7 @@ input:focus {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: none;
   padding: 16px 24px 32px 24px;
   display: flex;
   flex-direction: column;
@@ -274,11 +275,16 @@ input:focus {
   margin: 0 auto;
 }
 
-/* Video Box & Standard YouTube Widescreen (16:9) */
+.video-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+/* Video Box */
 .video-wrapper {
   position: relative;
+  flex: 0 0 auto;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 16 / 8.5;
   background: #000000;
   border-radius: 10px;
   border: 1px solid var(--border-color);
@@ -286,170 +292,15 @@ input:focus {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }
 
+.video-wrapper.is-standby {
+  aspect-ratio: auto;
+  height: 470px;
+}
+
 #player {
   width: 100%;
   height: 100%;
   display: block;
-}
-
-.playback-controls {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 7px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-surface);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.playback-controls::-webkit-scrollbar {
-  display: none;
-}
-
-.playback-buttons,
-.playback-options,
-.playback-timeline,
-.playback-option {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-}
-
-.playback-controls .btn-icon {
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  padding: 5px;
-}
-
-.playback-controls .btn-icon svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-#playPauseBtn .play-icon,
-#playPauseBtn .pause-icon {
-  fill: currentColor;
-  stroke: none;
-}
-
-.playback-controls .hidden {
-  display: none;
-}
-
-.playback-control:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-.playback-timeline {
-  flex: 1 1 auto;
-  min-width: 100px;
-}
-
-.playback-controls input[type="range"] {
-  appearance: none;
-  -webkit-appearance: none;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.playback-timeline input[type="range"] {
-  flex: 1;
-  min-width: 50px;
-}
-
-.playback-controls input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--border-strong);
-}
-
-.playback-controls input[type="range"]::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--border-strong);
-}
-
-.playback-controls input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  margin-top: -4px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent-primary);
-}
-
-.playback-controls input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent-primary);
-}
-
-.playback-time {
-  min-width: 30px;
-  color: var(--text-secondary);
-  font-size: 0.65rem;
-  text-align: center;
-}
-
-.playback-option {
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.playback-option select {
-  height: 30px;
-  padding: 0 4px;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.7rem;
-}
-
-.volume-slider {
-  width: 68px;
-}
-
-.captions-button {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 30px;
-  padding: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.playback-control:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.video-panel:fullscreen {
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  background: var(--bg-surface);
 }
 
 .video-placeholder {
@@ -846,17 +697,15 @@ input:focus {
   flex-direction: column;
   gap: 6px;
   max-height: 280px;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 4px;
+  scrollbar-width: none;
 }
 
 .timestamps-list::-webkit-scrollbar {
-  width: 5px;
-}
-
-.timestamps-list::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 4px;
+  display: none;
 }
 
 .empty-timestamps-hint {
