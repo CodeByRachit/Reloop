@@ -2,7 +2,7 @@
 
 > Distraction-free YouTube study workspace with local AI note indexing and progressive concept mapping.
 
-Reloop turns YouTube video lectures into an active, distraction-free study station. It extracts real YouTube video captions, summarizes 15-second lecture segments in real time using local models (WebLLM via WebGPU or local Ollama), and progressively generates a multi-branch 2D concept map using Mermaid.js.
+Reloop turns YouTube video lectures into an active, distraction-free study station. Its landing page at `/` accepts a YouTube link and embeds the actual study workspace at `/focus` as a live demo. The workspace extracts YouTube captions, summarizes 15-second lecture segments with local models (WebLLM via WebGPU or local Ollama), and progressively generates a multi-branch 2D concept map using Mermaid.js.
 
 ---
 
@@ -27,7 +27,11 @@ Reloop/
 ├── .gitignore             # Leakage prevention & dependency exclusion
 ├── README.md              # Project documentation
 └── public/
-    ├── index.html         # Main workspace layout
+    ├── landing.html       # Public landing page
+    ├── landing.css        # Landing page styling
+    ├── landing.js         # Landing page interactions
+    ├── youtube.js         # Shared YouTube URL parsing and normalization
+    ├── index.html         # Focus-session workspace (served at /focus)
     ├── style.css          # Minimalist Light Theme styles
     └── app.js             # Client logic (WebLLM, YouTube player, Mermaid canvas)
 ```
@@ -112,7 +116,7 @@ If you prefer using [Ollama](https://ollama.ai) on your system (`localhost:11434
    npm start
    ```
 
-4. Open your browser and navigate to:
+4. Open your browser and navigate to the landing page:
    ```
    http://localhost:3000
    ```

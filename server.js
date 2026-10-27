@@ -1,11 +1,23 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getSubtitles, getVideoDetails } from 'youtube-caption-extractor';
 
 const app = express();
+const publicDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(publicDirectory, 'landing.html'));
+});
+
+app.get('/focus', (req, res) => {
+  res.sendFile(path.join(publicDirectory, 'index.html'));
+});
+
+app.use(express.static(publicDirectory));
 
 // 1. REAL YouTube Transcript + Video Details Extractor
 app.get('/api/transcript', async (req, res) => {
@@ -74,7 +86,7 @@ app.post('/api/ollama', async (req, res) => {
   }
 });
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, () => {
   console.log(`🔁 Reloop Server running at http://localhost:${PORT}`);
 });
