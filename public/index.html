@@ -52,7 +52,7 @@
 
   <!-- Main Workspace Layout with Resizable Inspector -->
   <main class="workspace" id="workspaceContainer">
-    <!-- Left / Center Column: Standard Size YouTube Player + Timestamps -->
+    <!-- Left / Center Column: Video + Chapters Only -->
     <section class="video-panel" id="videoPanel">
       <div class="video-scroll-container">
         <div class="video-wrapper is-standby">
@@ -89,95 +89,95 @@
           <!-- Horizontal scrollable chapter pills row -->
           <div class="chapter-pills-row" id="chapterPillsRow"></div>
         </div>
-
-        <!-- Timestamps Section Directly Below Video -->
-        <div class="timestamps-section" id="timestampsSection">
-          <div class="section-header">
-            <div class="section-title">
-              <span>TIMESTAMPS &amp; KEY MOMENTS</span>
-              <span id="timestampCountBadge" class="mono-badge">0 saved</span>
-            </div>
-            <div class="section-header-actions">
-              <button id="quickStampBtn" class="btn-small btn-stamp-trigger" type="button" title="Bookmark current video timestamp (Shortcut: T)">
-                + Mark at <span id="quickStampTimePreview" class="mono-text">0:00</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Timestamp Creator Bar -->
-          <form id="timestampForm" class="timestamp-form" onsubmit="return false;">
-            <span class="stamp-current-tag mono-text" id="formStampTimeTag">0:00</span>
-            <input type="text" id="timestampTitleInput" placeholder="Add moment title / note (e.g. Key Concept, Proof, Problem 1)..." autocomplete="off" />
-            <button type="submit" id="addTimestampSubmitBtn" class="btn-primary btn-save-stamp">Add Stamp</button>
-          </form>
-
-          <!-- Timestamps List -->
-          <div id="timestampsList" class="timestamps-list">
-            <div class="empty-timestamps-hint" id="emptyTimestampsHint">
-              No timestamps added yet. Click <strong>+ Mark at 0:00</strong> or press <strong>T</strong> while watching to bookmark moments.
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 
-    <!-- Draggable Resizer Bar Between Video and Side Inspector (Hidden when sidebar collapsed) -->
-    <div class="workspace-resizer collapsed" id="workspaceResizer" title="Drag to resize video and side panel (Double click to reset)">
+    <!-- Draggable Resizer Bar Between Video and Side Inspector -->
+    <div class="workspace-resizer" id="workspaceResizer" title="Drag to resize video and side panel">
       <div class="resizer-line"></div>
     </div>
 
-    <!-- Collapsible & Resizable Side Inspector Panel for Notes & Concept Map (Closed initially) -->
-    <aside class="side-inspector collapsed" id="sideInspector">
-      <div class="inspector-tabs-header">
-        <div class="inspector-title-group">
-          <span id="inspectorTitle" class="inspector-title">Lecture Notes</span>
-        </div>
-        <div class="inspector-header-right">
-          <button id="closeInspectorBtn" class="btn-icon" title="Close Side Panel" aria-label="Close Side Panel">
-            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-        </div>
-      </div>
+    <!-- Right Side Panel: Hosts Notes/Map (Top) + Timestamps (Bottom/Full) -->
+<aside class="side-inspector" id="sideInspector">
 
-      <div class="inspector-content">
-        <!-- Tab 1: Lecture Notes -->
-        <div id="tabContentNotes" class="tab-pane active">
-          <div class="notes-box">
-            <div class="panel-header">
-              <div class="panel-title">
-                <span>LECTURE NOTES</span>
-                <span class="panel-subtitle">Auto-indexed every 15s</span>
-              </div>
-              <span id="focusTimer" class="mono-badge">00:00</span>
-            </div>
-            <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
+      <!-- TOP HALF WRAPPER (Initially Hidden: Open tabhi hoga jab button click ho) -->
+      <div class="inspector-top-wrapper hidden" id="inspectorTopWrapper">
+        <div class="inspector-tabs-header">
+          <div class="inspector-title-group">
+            <span id="inspectorTitle" class="inspector-title">Lecture Notes</span>
+          </div>
+          <div class="inspector-header-right">
+            <button id="closeInspectorBtn" class="btn-icon" type="button" title="Close" aria-label="Close">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
           </div>
         </div>
 
-        <!-- Tab 2: Architectural Concept Map Canvas -->
-        <div id="tabContentDiagram" class="tab-pane">
-          <div class="diagram-panel">
-            <div class="panel-header">
-              <div class="panel-title">
-                <span>CONCEPT ARCHITECTURE</span>
-                <span id="diagramStatus" class="status-text">Idle</span>
+        <div class="inspector-content">
+          <!-- Tab 1: Lecture Notes -->
+          <div id="tabContentNotes" class="tab-pane active">
+            <div class="notes-box">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <span>LECTURE NOTES</span>
+                  <span class="panel-subtitle">Auto-indexed every 15s</span>
+                </div>
+                <span id="focusTimer" class="mono-badge">00:00</span>
               </div>
-              <div class="diagram-actions">
-                <button id="zoomOutBtn" class="btn-icon" title="Zoom Out">&minus;</button>
-                <button id="zoomResetBtn" class="btn-small mono-text">100%</button>
-                <button id="zoomInBtn" class="btn-icon" title="Zoom In">&plus;</button>
-                <button id="refreshDiagramBtn" class="btn-small">Sync Step</button>
-              </div>
+              <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
             </div>
+          </div>
 
-            <div id="mermaidContainer" class="mermaid-box">
-              <div class="empty-diagram-msg">
-                Concept graph will render here as lecture segments complete.
+          <!-- Tab 2: Architectural Concept Map Canvas -->
+          <div id="tabContentDiagram" class="tab-pane">
+            <div class="diagram-panel">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <span>CONCEPT ARCHITECTURE</span>
+                  <span id="diagramStatus" class="status-text">Idle</span>
+                </div>
+                <div class="diagram-actions">
+                  <button id="zoomOutBtn" class="btn-icon" type="button" title="Zoom Out">&minus;</button>
+                  <button id="zoomResetBtn" class="btn-small mono-text" type="button">100%</button>
+                  <button id="zoomInBtn" class="btn-icon" type="button" title="Zoom In">&plus;</button>
+                  <button id="refreshDiagramBtn" class="btn-small" type="button">Sync Step</button>
+                </div>
+              </div>
+
+              <div id="mermaidContainer" class="mermaid-box">
+                <div class="empty-diagram-msg">
+                  Concept graph will render here as lecture segments complete.
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- BOTTOM HALF: Timestamps Section (Directly occupies 100% when top hidden, exactly 50% when top open) -->
+      <div class="timestamps-section" id="timestampsSection">
+        <div class="section-header">
+          <div class="section-title">
+            <span>TIMESTAMPS &amp; KEY MOMENTS</span>
+            <span id="timestampCountBadge" class="mono-badge">0 saved</span>
+          </div>
+        </div>
+
+        <!-- Timestamp Creator Bar -->
+        <form id="timestampForm" class="timestamp-form" onsubmit="return false;">
+          <span class="stamp-current-tag mono-text" id="formStampTimeTag">0:00</span>
+          <input type="text" id="timestampTitleInput" placeholder="Add moment title / note..." autocomplete="off" />
+          <button type="submit" id="addTimestampSubmitBtn" class="btn-primary btn-save-stamp">Add</button>
+        </form>
+
+        <!-- Timestamps List -->
+        <div id="timestampsList" class="timestamps-list">
+          <div class="empty-timestamps-hint" id="emptyTimestampsHint">
+            No timestamps added yet. Press <strong>T</strong> while watching to bookmark moments.
+          </div>
+        </div>
+      </div>
+
     </aside>
   </main>
 
