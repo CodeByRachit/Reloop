@@ -131,6 +131,10 @@
           <input id="videoUrl" name="videoUrl" type="text" inputmode="url" autocomplete="url"
             placeholder="Paste a video link..." aria-describedby="formMessage" />
 
+          <button id="clearUrl" class="clear-url-btn" type="button" aria-label="Clear video link" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+
           <button id="startLearning" class="primary-button" type="submit" disabled>
             <span class="button-label">Start learning</span>
 
@@ -143,6 +147,7 @@
         </form>
 
         <p id="formMessage" class="form-message" aria-live="polite"></p>
+        <div id="recentSessions" class="recent-sessions-container" aria-label="Resume study session"></div>
 
         <div class="hero-trust reveal reveal-delay-3">
           <span>
