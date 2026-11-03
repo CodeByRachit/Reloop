@@ -44,11 +44,15 @@ let player = null;
 let playerReady = false;
 let hasActiveVideo = false;
 let currentVideoId = null;
+let currentVideoTitle = '';
 let isStudying = false;
 let isGenerating = false;
 let focusSeconds = 0;
 let lastCompletedStep = -1;
 let userEngagedInFullscreen = false; // Guard: Page load par popup aane se rokega
+let pendingStartTime = 0;
+let lastSavedSec = -1;
+let lastSaveTime = 0;
 
 // Pan & Zoom State
 let currentZoom = 1.0;
@@ -212,12 +216,61 @@ function extractVideoId(url) {
   return extractYouTubeVideoId(url);
 }
 
+function isPageReload() {
+  const nav = performance.getEntriesByType('navigation');
+  if (nav && nav.length > 0) {
+    return nav[0].type === 'reload';
+  }
+  return performance.navigation && performance.navigation.type === 1;
+}
+
 function formatTime(sec) {
   const safe = Math.max(0, Math.floor(Number.isFinite(sec) ? sec : 0));
   const m = Math.floor(safe / 60);
   const s = String(safe % 60).padStart(2, '0');
   return `${m}:${s}`;
 }
+
+function syncActiveTabSession() {
+  if (!currentVideoId) return;
+  const cur = (player && typeof player.getCurrentTime === 'function') ? player.getCurrentTime() : 0;
+  const safeTime = Number.isFinite(cur) ? Math.floor(cur) : 0;
+  try {
+    sessionStorage.setItem('reloop_active_tab_video', JSON.stringify({
+      videoId: currentVideoId,
+      lastTime: safeTime,
+      title: currentVideoTitle || currentVideoId
+    }));
+  } catch {}
+}
+
+async function savePlaybackState(force = false) {
+  if (!currentVideoId || !player || typeof player.getCurrentTime !== 'function') return;
+  const currentSec = player.getCurrentTime();
+  if (!Number.isFinite(currentSec) || currentSec < 0) return;
+
+  // Always update sessionStorage synchronously first so pagehide/beforeunload never miss it
+  syncActiveTabSession();
+
+  const now = Date.now();
+  if (force || (now - lastSaveTime >= 2000 && Math.abs(currentSec - lastSavedSec) >= 1)) {
+    lastSavedSec = currentSec;
+    lastSaveTime = now;
+    await saveCachedSession(currentVideoId, {
+      lastTime: Math.floor(currentSec),
+      focusSeconds: focusSeconds
+    }).catch(() => {});
+  }
+}
+
+window.addEventListener('pagehide', () => {
+  syncActiveTabSession();
+  savePlaybackState(true);
+});
+window.addEventListener('beforeunload', () => {
+  syncActiveTabSession();
+  savePlaybackState(true);
+});
 
 function initYouTubePlayer() {
   if (window.YT && window.YT.Player) {
@@ -229,12 +282,32 @@ function initYouTubePlayer() {
         onReady: () => {
           playerReady = true;
           if (currentVideoId) {
-            loadStudyVideo(currentVideoId);
+            loadStudyVideo(currentVideoId, pendingStartTime, pendingStartTime > 0);
           }
           updatePlaybackProgress();
         },
-        onStateChange: () => {
+        onStateChange: (event) => {
           updatePlaybackProgress();
+          if (pendingStartTime > 0 && (event.data === 1 || event.data === 5 || event.data === 2)) {
+            const target = pendingStartTime;
+            if (player && typeof player.seekTo === 'function') {
+              player.seekTo(target, true);
+            }
+            if (lockOverlay && !lockOverlay.classList.contains('hidden')) {
+              if (player && typeof player.pauseVideo === 'function') {
+                player.pauseVideo();
+              }
+            } else {
+              pendingStartTime = 0;
+            }
+          } else if (lockOverlay && !lockOverlay.classList.contains('hidden') && event.data === 1) {
+            if (player && typeof player.pauseVideo === 'function') {
+              player.pauseVideo();
+            }
+          }
+          if (event && (event.data === 2 || event.data === 0)) {
+            savePlaybackState(true);
+          }
         }
       }
     });
@@ -243,9 +316,21 @@ function initYouTubePlayer() {
 if (window.YT && window.YT.Player) initYouTubePlayer();
 else window.onYouTubeIframeAPIReady = initYouTubePlayer;
 
-function loadStudyVideo(videoId) {
+function loadStudyVideo(videoId, startSeconds = 0, shouldPause = false) {
   if (!player) return;
-  player.loadVideoById(videoId);
+  const startAt = startSeconds > 0 ? startSeconds : (pendingStartTime > 0 ? pendingStartTime : 0);
+  if (startAt > 0) {
+    if (shouldPause && typeof player.cueVideoById === 'function') {
+      player.cueVideoById({ videoId, startSeconds: startAt });
+    } else if (typeof player.loadVideoById === 'function') {
+      player.loadVideoById({ videoId, startSeconds: startAt });
+      if (shouldPause && typeof player.pauseVideo === 'function') {
+        player.pauseVideo();
+      }
+    }
+  } else if (typeof player.loadVideoById === 'function') {
+    player.loadVideoById(videoId);
+  }
   hasActiveVideo = true;
   updatePlaybackProgress();
 }
@@ -917,7 +1002,9 @@ startStudyBtn.addEventListener('click', async () => {
   hasActiveVideo = false;
   isStudying = true;
   lastCompletedStep = -1;
-  userEngagedInFullscreen = false; // Reset
+  userEngagedInFullscreen = Boolean(document.fullscreenElement);
+  lastSavedSec = -1;
+  lastSaveTime = 0;
 
   document.querySelector('.video-wrapper').classList.remove('is-standby');
   videoStartPlaceholder.classList.add('hidden');
@@ -926,17 +1013,10 @@ startStudyBtn.addEventListener('click', async () => {
     try {
       await document.documentElement.requestFullscreen();
       userEngagedInFullscreen = true;
-    } catch (err) {
-      // Agar browser ne autoplay/programmatic fullscreen block kiya to error ignore karein
-      // UserEngagedInFullscreen false rahega jisse popup directly nahi aayega
+    } catch (error) {
       userEngagedInFullscreen = false;
+      console.error('Unable to enter fullscreen for study session:', error);
     }
-  } else {
-    userEngagedInFullscreen = true;
-  }
-
-  if (player && playerReady && player.loadVideoById) {
-    loadStudyVideo(videoId);
   }
 
   let session = await getCachedSession(videoId);
@@ -966,6 +1046,67 @@ startStudyBtn.addEventListener('click', async () => {
     });
   }
 
+  // When refreshing the tab, always start fresh from the first
+  const isReload = isPageReload();
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTime = Number(urlParams.get('t'));
+  const hasResumeParam = urlParams.has('resume') || (Number.isFinite(urlTime) && urlTime > 0);
+  let hasTabSession = false;
+  try {
+    hasTabSession = sessionStorage.getItem('reloop_in_tab_' + videoId) === 'true';
+  } catch {}
+
+  const shouldResume = !isReload && (hasResumeParam || hasTabSession);
+  let resumeTime = 0;
+  if (shouldResume) {
+    if (Number.isFinite(urlTime) && urlTime > 0) {
+      resumeTime = urlTime;
+    } else if (session && typeof session.lastTime === 'number' && session.lastTime > 2) {
+      resumeTime = session.lastTime;
+    }
+  }
+
+  const isResuming = shouldResume && resumeTime > 0;
+
+  currentVideoTitle = session?.title || videoId;
+
+  if (isReload) {
+    try {
+      sessionStorage.removeItem('reloop_in_tab_' + videoId);
+      sessionStorage.removeItem('reloop_active_tab_video');
+    } catch {}
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', `/focus?videoId=${encodeURIComponent(videoId)}`);
+    }
+  } else {
+    try {
+      sessionStorage.setItem('reloop_in_tab_' + videoId, 'true');
+      sessionStorage.setItem('reloop_active_tab_video', JSON.stringify({
+        videoId,
+        lastTime: isResuming ? resumeTime : 0,
+        title: currentVideoTitle
+      }));
+    } catch {}
+  }
+
+  if (isResuming) {
+    pendingStartTime = resumeTime;
+    focusSeconds = session?.focusSeconds || Math.floor(resumeTime);
+    const mins = String(Math.floor(focusSeconds / 60)).padStart(2, '0');
+    const secs = String(focusSeconds % 60).padStart(2, '0');
+    focusTimer.textContent = `${mins}:${secs}`;
+  } else {
+    pendingStartTime = 0;
+    focusSeconds = 0;
+    focusTimer.textContent = '00:00';
+    saveCachedSession(videoId, { lastTime: 0, focusSeconds: 0 }).catch(() => {});
+    lockOverlay.classList.add('hidden');
+  }
+
+  if (player && playerReady && player.loadVideoById) {
+    loadStudyVideo(videoId, resumeTime, isResuming);
+  }
+
   const mode = localEngineSelect.value;
   if (mode !== 'ollama') {
     ensureWebLLMLoaded(MODELS[mode] || MODELS['webllm-fast']).catch(() => {});
@@ -990,10 +1131,23 @@ startStudyBtn.addEventListener('click', async () => {
     renderChaptersTimeline(dur);
   }
 
-  await renderProgressiveUI(session, -1);
-  diagramStatus.textContent = session.contentType === 'non-educational'
-    ? 'Notes unavailable for this content'
-    : `Awaiting segment 0:00 - 0:${STEP_INTERVAL_SECONDS}`;
+  const completedStep = isResuming && resumeTime > 0 ? Math.floor(resumeTime / STEP_INTERVAL_SECONDS) - 1 : -1;
+  lastCompletedStep = completedStep;
+
+  await renderProgressiveUI(session, completedStep);
+  if (session.contentType === 'non-educational') {
+    diagramStatus.textContent = 'Notes unavailable for this content';
+  } else if (completedStep >= 0) {
+    diagramStatus.textContent = `Resumed at ${formatTime(resumeTime)} (Synced up to ${formatTime((completedStep + 1) * STEP_INTERVAL_SECONDS)})`;
+  } else if (resumeTime > 0) {
+    diagramStatus.textContent = `Resumed at ${formatTime(resumeTime)}`;
+  } else {
+    diagramStatus.textContent = `Awaiting segment 0:00 - 0:${STEP_INTERVAL_SECONDS}`;
+  }
+
+  if (isResuming) {
+    triggerFocusInterrupt('Active tab lost focus.', true);
+  }
 });
 
 const requestedVideoId = new URLSearchParams(window.location.search).get('videoId');
@@ -1026,6 +1180,8 @@ setInterval(() => {
     const currentSec = player.getCurrentTime();
     if (!Number.isFinite(currentSec) || currentSec < 0) return;
 
+    savePlaybackState(false);
+
     const completedStep = Math.floor(currentSec / STEP_INTERVAL_SECONDS) - 1;
     const nextStepSec = (completedStep + 2) * STEP_INTERVAL_SECONDS;
     const secsRemaining = Math.max(0, Math.ceil(nextStepSec - currentSec));
@@ -1042,12 +1198,11 @@ setInterval(() => {
 }, 1000);
 
 // Popup trigger function: Sirf aur sirf tab chalega jab active study ho aur user fullscreen se bahar nikle
-function triggerFocusInterrupt(reason) {
-  if (!isStudying || !hasActiveVideo || !userEngagedInFullscreen) return;
-
-  if (player && typeof player.pauseVideo === 'function') {
-    player.pauseVideo();
-  }
+function triggerFocusInterrupt(reason, allowBeforeFullscreen = false) {
+  if (!isStudying || (!allowBeforeFullscreen && (!hasActiveVideo || !userEngagedInFullscreen))) return;
+  syncActiveTabSession();
+  savePlaybackState(true);
+  if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
   const motivationText = document.getElementById('motivationText');
   if (motivationText) {
     motivationText.textContent = `${reason} Return to fullscreen to continue your active study session.`;
@@ -1084,6 +1239,10 @@ if (resumeFocusBtn) {
       userEngagedInFullscreen = false;
       console.error('Unable to resume fullscreen study session:', error);
       return;
+    }
+    if (player && pendingStartTime > 0 && typeof player.seekTo === 'function') {
+      player.seekTo(pendingStartTime, true);
+      pendingStartTime = 0;
     }
     if (lockOverlay) {
       lockOverlay.classList.add('hidden');
