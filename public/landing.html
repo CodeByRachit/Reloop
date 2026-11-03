@@ -44,6 +44,9 @@
         <label class="sr-only" for="videoUrl">YouTube video link</label>
         <span class="youtube-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg></span>
         <input id="videoUrl" name="videoUrl" type="url" inputmode="url" autocomplete="url" placeholder="Paste a YouTube video link..." aria-describedby="formMessage" />
+        <button id="clearUrl" class="clear-url-btn" type="button" aria-label="Clear video link" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
         <button id="startLearning" class="primary-button" type="submit" disabled>
           <span class="button-label">Start learning</span>
           <svg class="button-arrow"><use href="#i-arrow" /></svg>
@@ -51,6 +54,7 @@
         </button>
       </form>
       <p id="formMessage" class="form-message" aria-live="polite"></p>
+      <div id="recentSessions" class="recent-sessions-container" aria-label="Resume study session"></div>
       <p class="hero-note reveal reveal-delay-3"><svg><use href="#i-shield" /></svg>No feed. No rabbit holes. Just the lesson.</p>
       <div class="hero-caption reveal reveal-delay-3"><span></span>One video. A clearer way through.</div>
     </section>

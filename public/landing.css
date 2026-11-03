@@ -50,6 +50,82 @@ h1, h2, h3, p { margin-top: 0; }
 .youtube-mark svg { width: 21px; height: 21px; fill: var(--red); }
 .video-form input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 15px; }
 .video-form input::placeholder { color: #9295a5; }
+.clear-url-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #edeef3;
+  color: #65697c;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease;
+  flex: 0 0 auto;
+}
+.clear-url-btn:hover {
+  background: #dfe0ea;
+  color: var(--ink);
+}
+.clear-url-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+
+.recent-sessions-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  max-width: min(720px, 100%);
+}
+.recent-sessions-container:empty {
+  display: none;
+}
+.recent-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7b7e93;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.recent-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid #e2e1f5;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #434063;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease;
+  box-shadow: 0 1px 3px rgba(32, 34, 75, 0.04);
+}
+.recent-pill:hover {
+  border-color: #9995fb;
+  background: #ffffff;
+  color: var(--ink);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(98, 93, 245, 0.12);
+}
+.recent-play-icon {
+  width: 11px;
+  height: 11px;
+  fill: var(--accent);
+}
+
 .primary-button { height: 52px; flex: 0 0 auto; display: inline-flex; justify-content: center; align-items: center; gap: 10px; padding: 0 19px; border: 0; border-radius: 9px; color: white; background: #20212d; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .18s ease, transform .18s ease, opacity .18s ease; }
 .primary-button:hover:not(:disabled) { background: #343544; transform: translateY(-1px); }
 .primary-button:active:not(:disabled) { transform: translateY(0); }
