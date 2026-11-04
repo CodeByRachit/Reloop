@@ -78,6 +78,18 @@ const cacheBadge = document.getElementById('cacheBadge');
 const focusTimer = document.getElementById('focusTimer');
 const videoStartPlaceholder = document.getElementById('videoStartPlaceholder');
 const cachedSessionsList = document.getElementById('cachedSessionsList');
+const backHomeBtn = document.getElementById('backHomeBtn');
+
+if (backHomeBtn) {
+  backHomeBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    try {
+      syncActiveTabSession();
+      savePlaybackState(true);
+    } catch {}
+    window.location.href = '/';
+  });
+}
 
 // Topbar Toggles & Side Inspector Elements
 const toggleNotesBtn = document.getElementById('toggleNotesBtn');
