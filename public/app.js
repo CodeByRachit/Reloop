@@ -49,6 +49,7 @@ let isStudying = false;
 let isGenerating = false;
 let focusSeconds = 0;
 let lastCompletedStep = -1;
+let userEngagedInFullscreen = false; // Guard: Page load par popup aane se rokega
 let pendingStartTime = 0;
 let lastSavedSec = -1;
 let lastSaveTime = 0;
@@ -90,8 +91,6 @@ const tabContentDiagram = document.getElementById('tabContentDiagram');
 
 // Timestamps Elements
 const timestampCountBadge = document.getElementById('timestampCountBadge');
-const quickStampBtn = document.getElementById('quickStampBtn');
-const quickStampTimePreview = document.getElementById('quickStampTimePreview');
 const timestampForm = document.getElementById('timestampForm');
 const formStampTimeTag = document.getElementById('formStampTimeTag');
 const timestampTitleInput = document.getElementById('timestampTitleInput');
@@ -342,7 +341,6 @@ function updatePlaybackProgress() {
   const currentTime = player.getCurrentTime();
   const duration = player.getDuration();
   if (Number.isFinite(currentTime)) {
-    if (quickStampTimePreview) quickStampTimePreview.textContent = formatTime(currentTime);
     if (formStampTimeTag && document.activeElement !== timestampTitleInput) {
       formStampTimeTag.textContent = formatTime(currentTime);
     }
@@ -554,13 +552,11 @@ function isCorruptedTranscript(text) {
 }
 
 async function classifyVideoWithLLM(session) {
-  // 1. Fast metadata filter for explicit music video/track releases
   const titleAndDesc = `${session.title || ''} ${session.description || ''}`.toLowerCase();
   if (/\b(official music video|official audio|lyrics video|audio track|full album|vevo)\b/i.test(titleAndDesc)) {
     return { isEducational: false, reason: 'Identified as official music/audio release' };
   }
 
-  // 2. Extract representative transcript excerpt (first ~30 subtitle lines, up to 900 chars)
   const transcript = session.transcript || [];
   if (!transcript.length) {
     return { isEducational: false, reason: 'No transcript available' };
@@ -577,7 +573,6 @@ async function classifyVideoWithLLM(session) {
     return { isEducational: false, reason: 'Transcript excerpt too short' };
   }
 
-  // 3. Prompt local LLM for binary classification (ultra-fast, ~10 tokens)
   const systemPrompt = 'You are an educational video content classifier. Output ONLY "EDUCATIONAL" or "NON_EDUCATIONAL".';
   const userPrompt = [
     'Analyze this YouTube video title and spoken transcript excerpt.',
@@ -663,10 +658,7 @@ function buildTranscriptFallback(spokenText) {
   const second = sentences.find((sentence) => sentence !== first && !areSimilarNotes(first, sentence)) ||
     'No separate supporting detail is clear';
 
-  return [
-    first,
-    second
-  ];
+  return [first, second];
 }
 
 function buildSongFallback(spokenText) {
@@ -952,7 +944,6 @@ async function renderMermaid(code) {
     const { svg } = await mermaid.render(id, code);
     mermaidContainer.innerHTML = `<div id="mermaidZoomTarget">${svg}</div>`;
 
-    // Strip any inline max-width so the SVG stays crisp and full-sized
     const svgEl = mermaidContainer.querySelector('svg');
     if (svgEl) {
       svgEl.style.maxWidth = 'none';
@@ -1004,7 +995,6 @@ zoomResetBtn.addEventListener('click', () => {
   applyZoomAndPan();
 });
 
-// Mouse Wheel / Trackpad Pinch Zoom inside Mermaid Canvas (up to 800%)
 mermaidContainer.addEventListener(
   'wheel',
   (e) => {
@@ -1015,7 +1005,6 @@ mermaidContainer.addEventListener(
   { passive: false }
 );
 
-// Click-and-Drag Panning inside Mermaid Canvas
 mermaidContainer.addEventListener('mousedown', (e) => {
   isPanning = true;
   startPanX = e.clientX - panX;
@@ -1036,7 +1025,7 @@ window.addEventListener('mouseup', () => {
 });
 
 // ============================================================================
-// 5. START BUTTON, CONTINUOUS WATCH LOOP & FULLSCREEN LOCK
+// 5. START BUTTON, CONTINUOUS WATCH LOOP & FULLSCREEN LOCK (DIRECT POPUP FIXED)
 // ============================================================================
 startStudyBtn.addEventListener('click', async () => {
   const url = ytUrlInput.value.trim();
@@ -1046,11 +1035,23 @@ startStudyBtn.addEventListener('click', async () => {
   currentVideoId = videoId;
   hasActiveVideo = false;
   isStudying = true;
+  lastCompletedStep = -1;
+  userEngagedInFullscreen = Boolean(document.fullscreenElement);
+  lastSavedSec = -1;
+  lastSaveTime = 0;
 
   document.querySelector('.video-wrapper').classList.remove('is-standby');
   videoStartPlaceholder.classList.add('hidden');
 
-// Fullscreen requested on start for fresh sessions, or via Resume button for paused sessions
+  if (!document.fullscreenElement) {
+    try {
+      await document.documentElement.requestFullscreen();
+      userEngagedInFullscreen = true;
+    } catch (error) {
+      userEngagedInFullscreen = false;
+      console.error('Unable to enter fullscreen for study session:', error);
+    }
+  }
 
   let session = await getCachedSession(videoId);
   if (!session || !session.transcript || typeof session.description !== 'string' || session.description.length === 0) {
@@ -1134,9 +1135,6 @@ startStudyBtn.addEventListener('click', async () => {
     focusTimer.textContent = '00:00';
     saveCachedSession(videoId, { lastTime: 0, focusSeconds: 0 }).catch(() => {});
     lockOverlay.classList.add('hidden');
-    if (!document.fullscreenElement) {
-      await document.documentElement.requestFullscreen().catch(() => {});
-    }
   }
 
   if (player && playerReady && player.loadVideoById) {
@@ -1148,7 +1146,6 @@ startStudyBtn.addEventListener('click', async () => {
     ensureWebLLMLoaded(MODELS[mode] || MODELS['webllm-fast']).catch(() => {});
   }
 
-  // LLM Educational Content Classifier
   if (!session.contentType || session.classificationVersion !== CLASSIFICATION_VERSION) {
     const classification = await classifyVideoWithLLM(session);
     const contentType = classification.isEducational ? 'educational' : 'non-educational';
@@ -1183,7 +1180,7 @@ startStudyBtn.addEventListener('click', async () => {
   }
 
   if (isResuming) {
-    triggerFocusInterrupt('Active tab lost focus.');
+    triggerFocusInterrupt('Active tab lost focus.', true);
   }
 });
 
@@ -1234,36 +1231,61 @@ setInterval(() => {
   }
 }, 1000);
 
-function triggerFocusInterrupt(reason) {
-  if (!isStudying) return;
+// Popup trigger function: Sirf aur sirf tab chalega jab active study ho aur user fullscreen se bahar nikle
+function triggerFocusInterrupt(reason, allowBeforeFullscreen = false) {
+  if (!isStudying || (!allowBeforeFullscreen && (!hasActiveVideo || !userEngagedInFullscreen))) return;
   syncActiveTabSession();
   savePlaybackState(true);
-  if (player && player.pauseVideo) player.pauseVideo();
-  document.getElementById('motivationText').textContent = `${reason} Return to fullscreen to continue your active study session.`;
-  lockOverlay.classList.remove('hidden');
+  if (player && typeof player.pauseVideo === 'function') player.pauseVideo();
+  const motivationText = document.getElementById('motivationText');
+  if (motivationText) {
+    motivationText.textContent = `${reason} Return to fullscreen to continue your active study session.`;
+  }
+  if (lockOverlay) {
+    lockOverlay.classList.remove('hidden');
+  }
 }
 
 document.addEventListener('fullscreenchange', () => {
-  if (isStudying && !document.fullscreenElement) triggerFocusInterrupt('Fullscreen mode was exited.');
-});
-
-document.addEventListener('visibilitychange', () => {
-  if (isStudying && document.hidden) triggerFocusInterrupt('Active tab lost focus.');
-});
-
-resumeFocusBtn.addEventListener('click', async () => {
-  await document.documentElement.requestFullscreen().catch(() => {});
-  lockOverlay.classList.add('hidden');
-  if (player) {
-    if (pendingStartTime > 0 && typeof player.seekTo === 'function') {
-      player.seekTo(pendingStartTime, true);
-      pendingStartTime = 0;
-    }
-    if (typeof player.playVideo === 'function') {
-      player.playVideo();
+  if (document.fullscreenElement) {
+    userEngagedInFullscreen = true;
+    if (lockOverlay) lockOverlay.classList.add('hidden');
+  } else {
+    if (isStudying && userEngagedInFullscreen) {
+      triggerFocusInterrupt('Fullscreen mode was exited.');
+      userEngagedInFullscreen = false;
     }
   }
 });
+
+document.addEventListener('visibilitychange', () => {
+  if (isStudying && document.hidden && userEngagedInFullscreen) {
+    triggerFocusInterrupt('Active tab lost focus.');
+  }
+});
+
+if (resumeFocusBtn) {
+  resumeFocusBtn.onclick = async () => {
+    try {
+      await document.documentElement.requestFullscreen();
+      userEngagedInFullscreen = true;
+    } catch (error) {
+      userEngagedInFullscreen = false;
+      console.error('Unable to resume fullscreen study session:', error);
+      return;
+    }
+    if (player && pendingStartTime > 0 && typeof player.seekTo === 'function') {
+      player.seekTo(pendingStartTime, true);
+      pendingStartTime = 0;
+    }
+    if (lockOverlay) {
+      lockOverlay.classList.add('hidden');
+    }
+    if (player && typeof player.playVideo === 'function') {
+      player.playVideo();
+    }
+  };
+}
 
 // ============================================================================
 // 6. TIMESTAMPS CREATION & MANAGEMENT
@@ -1286,7 +1308,7 @@ function renderTimestampsList() {
   if (count === 0) {
     timestampsList.innerHTML = `
       <div class="empty-timestamps-hint" id="emptyTimestampsHint">
-        No timestamps added yet. Click <strong>+ Mark at 0:00</strong> or press <strong>T</strong> while watching to bookmark moments.
+        No timestamps added yet. Press <strong>T</strong> while watching to bookmark moments.
       </div>
     `;
     return;
@@ -1324,13 +1346,10 @@ function renderTimestampsList() {
       e.stopPropagation();
       const idToDelete = btn.dataset.deleteId;
       const deletedIndex = currentTimestamps.findIndex((stamp) => stamp.id === idToDelete);
-      const outerScrollContainer = timestampsList.closest('.video-scroll-container');
-      const outerScrollTop = outerScrollContainer ? outerScrollContainer.scrollTop : 0;
       const listScrollTop = timestampsList.scrollTop;
       currentTimestamps = currentTimestamps.filter((s) => s.id !== idToDelete);
       renderTimestampsList();
       timestampsList.scrollTop = listScrollTop;
-      if (outerScrollContainer) outerScrollContainer.scrollTop = outerScrollTop;
       const remainingDeleteButtons = timestampsList.querySelectorAll('.timestamp-delete-btn');
       remainingDeleteButtons[Math.min(deletedIndex, remainingDeleteButtons.length - 1)]
         ?.focus({ preventScroll: true });
@@ -1379,14 +1398,6 @@ function highlightActiveTimestamp(curSec) {
 }
 
 function initTimestamps() {
-  if (quickStampBtn) {
-    quickStampBtn.addEventListener('click', () => {
-      const curTime = player && typeof player.getCurrentTime === 'function' ? player.getCurrentTime() : 0;
-      if (formStampTimeTag) formStampTimeTag.textContent = formatTime(curTime);
-      if (timestampTitleInput) timestampTitleInput.focus();
-    });
-  }
-
   if (timestampForm) {
     timestampForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -1397,7 +1408,6 @@ function initTimestamps() {
     });
   }
 
-  // Keyboard shortcut 'T' to quickly mark moment
   window.addEventListener('keydown', (e) => {
     if (e.key === 't' || e.key === 'T') {
       const activeEl = document.activeElement;
@@ -1417,13 +1427,13 @@ function initTimestamps() {
 }
 
 // ============================================================================
-// 7. RESIZABLE WORKSPACE & SIDE INSPECTOR TABS
-// ============================================================================
-// ============================================================================
-// 7. RESIZABLE WORKSPACE & SIDE INSPECTOR TABS
+// 7. RESIZABLE WORKSPACE & SIDE INSPECTOR TABS (50%-50% & Full-View Logic)
 // ============================================================================
 function initResizableWorkspace() {
-  if (!sideInspector) return;
+  const inspectorTopWrapper = document.getElementById('inspectorTopWrapper');
+  const closeBtn = document.getElementById('closeInspectorBtn');
+
+  if (!sideInspector || !inspectorTopWrapper) return;
 
   const savedWidth = localStorage.getItem('reloop_side_width');
   if (savedWidth) {
@@ -1432,51 +1442,71 @@ function initResizableWorkspace() {
     sideInspector.style.setProperty('--side-panel-width', `${w}px`);
   }
 
-  // Keep sidebar and resizer strictly collapsed by default initially
-  sideInspector.classList.add('collapsed');
-  if (workspaceResizer) workspaceResizer.classList.add('collapsed');
-  if (toggleNotesBtn) toggleNotesBtn.classList.remove('active');
-  if (toggleDiagramBtn) toggleDiagramBtn.classList.remove('active');
+  // Right sidebar hamesha open rahega taaki Timestamps 100% display ho
+  sideInspector.classList.remove('collapsed');
+  if (workspaceResizer) workspaceResizer.classList.remove('collapsed');
 
-  function openInspector(tab = 'notes') {
-    activeInspectorTab = tab;
-    sideInspector.classList.remove('collapsed');
-    if (workspaceResizer) workspaceResizer.classList.remove('collapsed');
+  // Start me Top section closed rahega
+  closeTopSection();
+
+  function openTopSection(tabName) {
+    activeInspectorTab = tabName;
+    inspectorTopWrapper.classList.remove('hidden');
 
     if (inspectorTitle) {
-      inspectorTitle.textContent = tab === 'diagram' ? 'Concept Architecture' : 'Lecture Notes';
+      inspectorTitle.textContent = tabName === 'diagram' ? 'CONCEPT ARCHITECTURE' : 'LECTURE NOTES';
     }
-    if (tabContentNotes) tabContentNotes.classList.toggle('active', tab === 'notes');
-    if (tabContentDiagram) tabContentDiagram.classList.toggle('active', tab === 'diagram');
+    if (tabContentNotes) tabContentNotes.classList.toggle('active', tabName === 'notes');
+    if (tabContentDiagram) tabContentDiagram.classList.toggle('active', tabName === 'diagram');
 
-    if (toggleNotesBtn) toggleNotesBtn.classList.toggle('active', tab === 'notes');
-    if (toggleDiagramBtn) toggleDiagramBtn.classList.toggle('active', tab === 'diagram');
+    if (toggleNotesBtn) toggleNotesBtn.classList.toggle('active', tabName === 'notes');
+    if (toggleDiagramBtn) toggleDiagramBtn.classList.toggle('active', tabName === 'diagram');
 
-    if (tab === 'diagram') {
+    if (tabName === 'diagram') {
       setTimeout(applyZoomAndPan, 60);
     }
   }
 
-  function closeInspector() {
-    sideInspector.classList.add('collapsed');
-    if (workspaceResizer) workspaceResizer.classList.add('collapsed');
+  function closeTopSection() {
+    activeInspectorTab = null;
+    inspectorTopWrapper.classList.add('hidden');
+
     if (toggleNotesBtn) toggleNotesBtn.classList.remove('active');
     if (toggleDiagramBtn) toggleDiagramBtn.classList.remove('active');
   }
 
-  function toggleInspector(tab) {
-    if (!sideInspector.classList.contains('collapsed') && activeInspectorTab === tab) {
-      closeInspector();
+  function toggleTopSection(tabName) {
+    const isAlreadyOpen = !inspectorTopWrapper.classList.contains('hidden');
+    if (isAlreadyOpen && activeInspectorTab === tabName) {
+      closeTopSection();
     } else {
-      openInspector(tab);
+      openTopSection(tabName);
     }
   }
 
-  if (toggleNotesBtn) toggleNotesBtn.addEventListener('click', () => toggleInspector('notes'));
-  if (toggleDiagramBtn) toggleDiagramBtn.addEventListener('click', () => toggleInspector('diagram'));
-  if (closeInspectorBtn) closeInspectorBtn.addEventListener('click', () => closeInspector());
+  if (toggleNotesBtn) {
+    toggleNotesBtn.onclick = (e) => {
+      e.preventDefault();
+      toggleTopSection('notes');
+    };
+  }
 
-  // Draggable splitter / resizer handle
+  if (toggleDiagramBtn) {
+    toggleDiagramBtn.onclick = (e) => {
+      e.preventDefault();
+      toggleTopSection('diagram');
+    };
+  }
+
+  if (closeBtn) {
+    closeBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeTopSection();
+    };
+  }
+
+  // Resizer bar dragging logic
   if (workspaceResizer) {
     let isResizing = false;
 
@@ -1513,7 +1543,7 @@ function initResizableWorkspace() {
     });
 
     workspaceResizer.addEventListener('dblclick', () => {
-      const defaultW = 440;
+      const defaultW = 450;
       sideInspector.style.width = `${defaultW}px`;
       sideInspector.style.setProperty('--side-panel-width', `${defaultW}px`);
       localStorage.setItem('reloop_side_width', defaultW);
@@ -1532,8 +1562,6 @@ function extractChaptersFromSession(session) {
   const chapters = [];
   const desc = session.description || '';
 
-  // 1. Try to find chapters with timestamps in description
-  // e.g. "0:00 - 4:32 ~ Hamare Saath Shri Raghunath" or "00:00 - Intro"
   const lines = desc.split('\n');
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -1551,14 +1579,11 @@ function extractChaptersFromSession(session) {
     }
   }
 
-  // If description had valid chapters (at least 2), sort and return them
   if (chapters.length >= 2) {
     chapters.sort((a, b) => a.time - b.time);
     return chapters;
   }
 
-  // 2. If NO chapters in description:
-  // ONLY create relevant milestones (at most 3 to 5 key moments, not too many unnecessary timestamps)
   const transcript = session.transcript || [];
   if (transcript.length > 0) {
     const lastItem = transcript[transcript.length - 1];
@@ -1596,7 +1621,6 @@ function renderChaptersTimeline(duration) {
     chaptersCountBadge.textContent = `${videoChapters.length} ${videoChapters.length === 1 ? 'topic' : 'topics'}`;
   }
 
-  // Render Marker Points along the straight line
   chapterMarkersContainer.innerHTML = videoChapters
     .map((chapter, index) => {
       const leftPct = Math.min(99.5, Math.max(0.5, (chapter.time / safeDuration) * 100));
@@ -1611,7 +1635,6 @@ function renderChaptersTimeline(duration) {
     })
     .join('');
 
-  // Render Horizontal Pills beneath the line
   chapterPillsRow.innerHTML = videoChapters
     .map(
       (chapter, index) => `
@@ -1623,7 +1646,6 @@ function renderChaptersTimeline(duration) {
     )
     .join('');
 
-  // Add click listeners to markers
   chapterMarkersContainer.querySelectorAll('.chapter-marker-point').forEach((point) => {
     point.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1637,7 +1659,6 @@ function renderChaptersTimeline(duration) {
     });
   });
 
-  // Add click listeners to pills
   chapterPillsRow.querySelectorAll('.chapter-pill').forEach((pill) => {
     pill.addEventListener('click', () => {
       const time = Number(pill.dataset.time);
@@ -1658,7 +1679,6 @@ function updateChaptersProgress(currentTime, duration) {
 
   if (videoChapters.length === 0) return;
 
-  // Find active chapter index
   let activeIndex = 0;
   for (let i = videoChapters.length - 1; i >= 0; i--) {
     if (videoChapters[i].time <= currentTime) {
@@ -1672,7 +1692,6 @@ function updateChaptersProgress(currentTime, duration) {
     currentChapterName.textContent = `${formatTime(activeChapter.time)} — ${activeChapter.title}`;
   }
 
-  // Update points styling
   if (chapterMarkersContainer) {
     chapterMarkersContainer.querySelectorAll('.chapter-marker-point').forEach((point) => {
       const pTime = Number(point.dataset.time);
@@ -1683,7 +1702,6 @@ function updateChaptersProgress(currentTime, duration) {
     });
   }
 
-  // Update pills styling
   if (chapterPillsRow) {
     chapterPillsRow.querySelectorAll('.chapter-pill').forEach((pill) => {
       const isActive = Number(pill.dataset.index) === activeIndex;
@@ -1692,7 +1710,6 @@ function updateChaptersProgress(currentTime, duration) {
   }
 }
 
-// Track click on the straight line track to seek proportionally
 if (chapterTrackWrapper) {
   chapterTrackWrapper.addEventListener('click', (e) => {
     if (e.target.closest('.chapter-marker-point')) return;
