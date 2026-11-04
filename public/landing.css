@@ -318,18 +318,41 @@ HERO
   border-radius: 9px;
   background: rgba(17, 17, 17, 0.92);
   box-shadow:
-    0 20px 80px rgba(0, 0, 0, 0.3),
-    inset 0 1px rgba(255, 255, 255, 0.025);
+    0 13px 38px rgba(32, 34, 75, .075),
+    0 2px 5px rgba(32, 34, 75, .035);
   transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    /* border-color 0.2s ease,
+    box-shadow 0.2s ease; */
+    border-color .3s ease,
+    box-shadow .3s ease,
+    transform .3s ease;
 }
 
-.video-form:focus-within {
+/* .video-form:focus-within {
   border-color: #777;
   box-shadow:
     0 0 0 3px rgba(255, 255, 255, 0.035),
     0 20px 80px rgba(0, 0, 0, 0.3);
+} */
+
+.video-form:focus-within {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.55);
+
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.07),
+    0 0 24px rgba(255, 255, 255, 0.09),
+    0 15px 40px rgba(0, 0, 0, 0.25);
+}
+
+.video-form:hover:not(:focus-within) {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.3);
+
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 20px rgba(255, 255, 255, 0.06),
+    0 16px 40px rgba(0, 0, 0, 0.25);
 }
 
 .input-icon svg {
