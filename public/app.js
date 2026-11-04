@@ -869,17 +869,21 @@ async function renderProgressiveUI(session, upToStepIndex) {
     'class ROOT rootNode;'
   ];
 
-  orderedKeys.forEach((key, i) => {
+  const maxVisibleKeys = 100;
+  const displayKeys = orderedKeys.length > maxVisibleKeys ? orderedKeys.slice(-maxVisibleKeys) : orderedKeys;
+  const isTruncated = orderedKeys.length > maxVisibleKeys;
+
+  displayKeys.forEach((key, i) => {
     const step = steps[key];
     const timeTag = formatTime(key * STEP_INTERVAL_SECONDS);
     const cId = 'C' + (i + 1);
     const dId = 'D' + (i + 1);
     const concept = String(step.mainConcept || ('Topic ' + (i + 1))).replace(/["\\]/g, '');
-    const detail = String(step.subBranchA || step.subBranchB || '').replace(/["\\]/g, '');
+    const detail = String(step.subBranchB || '').replace(/["\\]/g, '');
 
     mermaidLines.push(cId + '["' + (i + 1) + '. ' + concept + ' (' + timeTag + ')"]');
     if (i === 0) {
-      mermaidLines.push('ROOT ==> ' + cId);
+      mermaidLines.push('' + (isTruncated ? 'ROOT -.->|...earlier| ' : 'ROOT ==> ') + ' ' + cId);
     } else {
       mermaidLines.push('C' + i + ' --> ' + cId);
     }
