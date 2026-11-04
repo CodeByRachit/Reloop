@@ -16,8 +16,16 @@
   <!-- Top Navigation Bar -->
   <header class="topbar">
     <div class="brand-group">
-      <div class="brand-mark">R</div>
-      <span class="brand-name">Reloop</span>
+      <a href="/" id="backHomeBtn" class="btn-back" title="Back to Home" aria-label="Back to Home">
+        <svg viewBox="0 0 24 24" class="btn-back-icon" aria-hidden="true">
+          <path d="M19 12H5m7 7-7-7 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Home</span>
+      </a>
+      <a href="/" class="brand-link" title="Reloop Home">
+        <div class="brand-mark">R</div>
+        <span class="brand-name">Reloop</span>
+      </a>
       <span class="brand-tag">Workspace</span>
     </div>
 
@@ -52,10 +60,10 @@
 
   <!-- Main Workspace Layout with Resizable Inspector -->
   <main class="workspace" id="workspaceContainer">
-    <!-- Left / Center Column: Standard Size YouTube Player + Timestamps -->
+    <!-- Left / Center Column: Video + Chapters Only -->
     <section class="video-panel" id="videoPanel">
       <div class="video-scroll-container">
-        <div class="video-wrapper">
+        <div class="video-wrapper is-standby">
           <!-- Clean Starting State -->
           <div id="videoStartPlaceholder" class="video-placeholder">
             <div class="placeholder-box">
@@ -66,52 +74,6 @@
             </div>
           </div>
           <div id="player"></div>
-        </div>
-
-        <div class="playback-controls" aria-label="Video playback controls">
-          <div class="playback-buttons">
-            <button id="skipBackBtn" class="btn-icon playback-control" type="button" aria-label="Skip back 10 seconds" title="Back 10 seconds" disabled>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4m0 4h4M4.8 8a8 8 0 1 1-.2 7"/><path d="M10 10h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/></svg>
-            </button>
-            <button id="playPauseBtn" class="btn-icon playback-control" type="button" aria-label="Play video" title="Play" disabled>
-              <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>
-              <svg class="pause-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM15 5h4v14h-4z"/></svg>
-            </button>
-            <button id="skipForwardBtn" class="btn-icon playback-control" type="button" aria-label="Skip forward 10 seconds" title="Forward 10 seconds" disabled>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8V4m0 4h-4m3.2 0a8 8 0 1 0 .2 7"/><path d="M5 10h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Zm5 0h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/></svg>
-            </button>
-          </div>
-          <div class="playback-timeline">
-            <span id="playbackCurrentTime" class="playback-time mono-text">0:00</span>
-            <input id="playbackSeek" class="playback-control" type="range" min="0" max="0" step="0.1" value="0" aria-label="Seek video" disabled />
-            <span id="playbackDuration" class="playback-time mono-text">0:00</span>
-          </div>
-          <div class="playback-options">
-            <label class="playback-option" title="Playback speed">
-              <select id="playbackSpeed" class="playback-control" aria-label="Playback speed" disabled>
-                <option value="0.25">0.25×</option>
-                <option value="0.5">0.5×</option>
-                <option value="0.75">0.75×</option>
-                <option value="1" selected>1×</option>
-                <option value="1.25">1.25×</option>
-                <option value="1.5">1.5×</option>
-                <option value="1.75">1.75×</option>
-                <option value="2">2×</option>
-              </select>
-            </label>
-            <label class="playback-option volume-option" aria-label="Video volume">
-              <button id="muteBtn" class="btn-icon playback-control" type="button" aria-label="Mute video" title="Mute" disabled>
-                <svg class="volume-on-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path class="volume-waves" d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/></svg>
-                <svg class="volume-off-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm5 4 5 6m0-6-5 6"/></svg>
-              </button>
-              <input id="playbackVolume" class="playback-control volume-slider" type="range" min="0" max="100" step="1" value="100" aria-label="Video volume" disabled />
-            </label>
-            <button id="captionsBtn" class="btn-small playback-control captions-button" type="button" aria-label="Turn captions on" aria-pressed="false" title="Captions" disabled>CC</button>
-            <button id="fullscreenBtn" class="btn-icon playback-control" type="button" aria-label="Enter fullscreen" title="Fullscreen" disabled>
-              <svg class="fullscreen-enter-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></svg>
-              <svg class="fullscreen-exit-icon hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v4H4m12-4v4h4M4 16h4v4m12-4h-4v4"/></svg>
-            </button>
-          </div>
         </div>
 
         <!-- Video Chapters / Key Topic Segments Timeline Bar -->
@@ -135,95 +97,95 @@
           <!-- Horizontal scrollable chapter pills row -->
           <div class="chapter-pills-row" id="chapterPillsRow"></div>
         </div>
-
-        <!-- Timestamps Section Directly Below Video -->
-        <div class="timestamps-section" id="timestampsSection">
-          <div class="section-header">
-            <div class="section-title">
-              <span>TIMESTAMPS &amp; KEY MOMENTS</span>
-              <span id="timestampCountBadge" class="mono-badge">0 saved</span>
-            </div>
-            <div class="section-header-actions">
-              <button id="quickStampBtn" class="btn-small btn-stamp-trigger" type="button" title="Bookmark current video timestamp (Shortcut: T)">
-                + Mark at <span id="quickStampTimePreview" class="mono-text">0:00</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Timestamp Creator Bar -->
-          <form id="timestampForm" class="timestamp-form" onsubmit="return false;">
-            <span class="stamp-current-tag mono-text" id="formStampTimeTag">0:00</span>
-            <input type="text" id="timestampTitleInput" placeholder="Add moment title / note (e.g. Key Concept, Proof, Problem 1)..." autocomplete="off" />
-            <button type="submit" id="addTimestampSubmitBtn" class="btn-primary btn-save-stamp">Add Stamp</button>
-          </form>
-
-          <!-- Timestamps List -->
-          <div id="timestampsList" class="timestamps-list">
-            <div class="empty-timestamps-hint" id="emptyTimestampsHint">
-              No timestamps added yet. Click <strong>+ Mark at 0:00</strong> or press <strong>T</strong> while watching to bookmark moments.
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 
-    <!-- Draggable Resizer Bar Between Video and Side Inspector (Hidden when sidebar collapsed) -->
-    <div class="workspace-resizer collapsed" id="workspaceResizer" title="Drag to resize video and side panel (Double click to reset)">
+    <!-- Draggable Resizer Bar Between Video and Side Inspector -->
+    <div class="workspace-resizer" id="workspaceResizer" title="Drag to resize video and side panel">
       <div class="resizer-line"></div>
     </div>
 
-    <!-- Collapsible & Resizable Side Inspector Panel for Notes & Concept Map (Closed initially) -->
-    <aside class="side-inspector collapsed" id="sideInspector">
-      <div class="inspector-tabs-header">
-        <div class="inspector-title-group">
-          <span id="inspectorTitle" class="inspector-title">Lecture Notes</span>
-        </div>
-        <div class="inspector-header-right">
-          <button id="closeInspectorBtn" class="btn-icon" title="Close Side Panel" aria-label="Close Side Panel">
-            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-        </div>
-      </div>
+    <!-- Right Side Panel: Hosts Notes/Map (Top) + Timestamps (Bottom/Full) -->
+<aside class="side-inspector" id="sideInspector">
 
-      <div class="inspector-content">
-        <!-- Tab 1: Lecture Notes -->
-        <div id="tabContentNotes" class="tab-pane active">
-          <div class="notes-box">
-            <div class="panel-header">
-              <div class="panel-title">
-                <span>LECTURE NOTES</span>
-                <span class="panel-subtitle">Auto-indexed every 15s</span>
-              </div>
-              <span id="focusTimer" class="mono-badge">00:00</span>
-            </div>
-            <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
+      <!-- TOP HALF WRAPPER (Initially Hidden: Open tabhi hoga jab button click ho) -->
+      <div class="inspector-top-wrapper hidden" id="inspectorTopWrapper">
+        <div class="inspector-tabs-header">
+          <div class="inspector-title-group">
+            <span id="inspectorTitle" class="inspector-title">Lecture Notes</span>
+          </div>
+          <div class="inspector-header-right">
+            <button id="closeInspectorBtn" class="btn-icon" type="button" title="Close" aria-label="Close">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
           </div>
         </div>
 
-        <!-- Tab 2: Architectural Concept Map Canvas -->
-        <div id="tabContentDiagram" class="tab-pane">
-          <div class="diagram-panel">
-            <div class="panel-header">
-              <div class="panel-title">
-                <span>CONCEPT ARCHITECTURE</span>
-                <span id="diagramStatus" class="status-text">Idle</span>
+        <div class="inspector-content">
+          <!-- Tab 1: Lecture Notes -->
+          <div id="tabContentNotes" class="tab-pane active">
+            <div class="notes-box">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <span>LECTURE NOTES</span>
+                  <span class="panel-subtitle">Auto-indexed every 15s</span>
+                </div>
+                <span id="focusTimer" class="mono-badge">00:00</span>
               </div>
-              <div class="diagram-actions">
-                <button id="zoomOutBtn" class="btn-icon" title="Zoom Out">&minus;</button>
-                <button id="zoomResetBtn" class="btn-small mono-text">100%</button>
-                <button id="zoomInBtn" class="btn-icon" title="Zoom In">&plus;</button>
-                <button id="refreshDiagramBtn" class="btn-small">Sync Step</button>
-              </div>
+              <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
             </div>
+          </div>
 
-            <div id="mermaidContainer" class="mermaid-box">
-              <div class="empty-diagram-msg">
-                Concept graph will render here as lecture segments complete.
+          <!-- Tab 2: Architectural Concept Map Canvas -->
+          <div id="tabContentDiagram" class="tab-pane">
+            <div class="diagram-panel">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <span>CONCEPT ARCHITECTURE</span>
+                  <span id="diagramStatus" class="status-text">Idle</span>
+                </div>
+                <div class="diagram-actions">
+                  <button id="zoomOutBtn" class="btn-icon" type="button" title="Zoom Out">&minus;</button>
+                  <button id="zoomResetBtn" class="btn-small mono-text" type="button">100%</button>
+                  <button id="zoomInBtn" class="btn-icon" type="button" title="Zoom In">&plus;</button>
+                  <button id="refreshDiagramBtn" class="btn-small" type="button">Sync Step</button>
+                </div>
+              </div>
+
+              <div id="mermaidContainer" class="mermaid-box">
+                <div class="empty-diagram-msg">
+                  Enter a lecture link above to build your study concept map.
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- BOTTOM HALF: Timestamps Section (Directly occupies 100% when top hidden, exactly 50% when top open) -->
+      <div class="timestamps-section" id="timestampsSection">
+        <div class="section-header">
+          <div class="section-title">
+            <span>TIMESTAMPS &amp; KEY MOMENTS</span>
+            <span id="timestampCountBadge" class="mono-badge">0 saved</span>
+          </div>
+        </div>
+
+        <!-- Timestamp Creator Bar -->
+        <form id="timestampForm" class="timestamp-form" onsubmit="return false;">
+          <span class="stamp-current-tag mono-text" id="formStampTimeTag">0:00</span>
+          <input type="text" id="timestampTitleInput" placeholder="Add moment title / note..." autocomplete="off" />
+          <button type="submit" id="addTimestampSubmitBtn" class="btn-primary btn-save-stamp">Add</button>
+        </form>
+
+        <!-- Timestamps List -->
+        <div id="timestampsList" class="timestamps-list">
+          <div class="empty-timestamps-hint" id="emptyTimestampsHint">
+            No timestamps added yet. Press <strong>T</strong> while watching to bookmark moments.
+          </div>
+        </div>
+      </div>
+
     </aside>
   </main>
 
