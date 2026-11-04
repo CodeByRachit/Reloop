@@ -846,13 +846,47 @@ async function renderProgressiveUI(session, upToStepIndex) {
     studyNotes.scrollTop = studyNotes.scrollHeight;
   }
 
-  mermaidContainer.innerHTML = `
-    <div class="empty-diagram-msg" style="max-width: 440px; margin: auto; padding: 48px 20px; text-align: center;">
-      <div style="font-size: 2.2rem; margin-bottom: 12px;">🗺️</div>
-      <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">Concept Map Coming Soon</div>
-      <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">The interactive 2D concept map is being upgraded and will be added in a future update. Real-time lecture notes are auto-indexing in the <strong>Notes</strong> panel.</div>
-    </div>
-  `;
+  if (orderedKeys.length === 0) {
+    mermaidContainer.innerHTML = '<div class="empty-diagram-msg">Concept map will generate here as lecture segments complete.</div>';
+    return;
+  }
+
+  const rootTitle = cleanConceptPhrase(session.title || 'Lecture Overview', 4);
+  const mermaidLines = [
+    'flowchart TD',
+    'ROOT(["' + rootTitle + '"])',
+    'classDef default fill:#ffffff,stroke:#18181b,stroke-width:1.5px,color:#09090b,font-family:Inter;',
+    'classDef rootNode fill:#18181b,stroke:#18181b,stroke-width:2px,color:#ffffff,font-weight:bold;',
+    'classDef detailNode fill:#f4f4f5,stroke:#a1a1aa,stroke-width:1px,color:#52525b;',
+    'class ROOT rootNode;'
+  ];
+
+  const maxVisibleKeys = 100;
+  const displayKeys = orderedKeys.length > maxVisibleKeys ? orderedKeys.slice(-maxVisibleKeys) : orderedKeys;
+  const isTruncated = orderedKeys.length > maxVisibleKeys;
+
+  displayKeys.forEach((key, i) => {
+    const step = steps[key];
+    const timeTag = formatTime(key * STEP_INTERVAL_SECONDS);
+    const cId = 'C' + (i + 1);
+    const dId = 'D' + (i + 1);
+    const concept = String(step.mainConcept || ('Topic ' + (i + 1))).replace(/["\\]/g, '');
+    const detail = String(step.subBranchB || '').replace(/["\\]/g, '');
+
+    mermaidLines.push(cId + '["' + (i + 1) + '. ' + concept + ' (' + timeTag + ')"]');
+    if (i === 0) {
+      mermaidLines.push('' + (isTruncated ? 'ROOT -.->|...earlier| ' : 'ROOT ==> ') + ' ' + cId);
+    } else {
+      mermaidLines.push('C' + i + ' --> ' + cId);
+    }
+    if (detail && detail.toLowerCase() !== 'main point' && detail.toLowerCase() !== 'supporting detail') {
+      mermaidLines.push(dId + '("' + detail + '")');
+      mermaidLines.push(cId + ' -.-> ' + dId);
+      mermaidLines.push('class ' + dId + ' detailNode;');
+    }
+  });
+
+  await renderMermaid(mermaidLines.join('\n'));
 }
 
 async function processStepAtTime(currentSeconds, forceRegenerate = false) {
