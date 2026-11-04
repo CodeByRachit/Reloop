@@ -66,7 +66,9 @@ app.get('/api/transcript', async (req, res) => {
 // 2. Local Ollama Route (if you select Local Ollama in dropdown)
 app.post('/api/ollama', async (req, res) => {
   try {
-    const tagsRes = await fetch('http://127.0.0.1:11434/api/tags');
+    const tagsRes = await fetch('http://127.0.0.1:11434/api/tags', {
+      signal: AbortSignal.timeout(1500)
+    });
     const tagsData = await tagsRes.json();
     const modelName = req.body.model || tagsData?.models?.[0]?.name || 'llama3.2';
 
@@ -77,7 +79,8 @@ app.post('/api/ollama', async (req, res) => {
         model: modelName,
         prompt: req.body.prompt,
         stream: false
-      })
+      }),
+      signal: AbortSignal.timeout(12000)
     });
     const data = await ollamaRes.json();
     res.json({ response: data.response, model: modelName });
