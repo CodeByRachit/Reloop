@@ -35,7 +35,7 @@ const MODELS = {
 };
 
 const STEP_INTERVAL_SECONDS = 15;
-const NOTE_GENERATION_VERSION = 17;
+const NOTE_GENERATION_VERSION = 18;
 const CLASSIFICATION_VERSION = 6;
 const NON_EDUCATIONAL_MESSAGE =
   "This does not appear to be an educational video. Notes are unavailable for this content.";
@@ -866,6 +866,19 @@ function isPureFillerSegment(text) {
   return false;
 }
 
+function stripExamplesForDiagram(text) {
+  if (!text) return "";
+  let clean = String(text)
+    .replace(
+      /\b(for\s+example|for\s+instance|such\s+as|e\.g\.|like\s+when|take\s+the\s+example).*$/i,
+      "",
+    )
+    .replace(/\b(analogy|like\s+a\s+pizza|like\s+food|like\s+a\s+car).*$/i, "")
+    .replace(/[,;:]\s*$/, "")
+    .trim();
+  return clean || text;
+}
+
 function formatMermaidNodeText(text, maxLineChars = 40, maxTotalChars = 110) {
   if (!text) return "";
   let clean = String(text)
@@ -1036,28 +1049,16 @@ function buildStudyFallback(
 ) {
   const cleanTitle = cleanLectureTitle(sessionTitle || "Academic Lecture", 50);
 
-  // If spoken text is non-English script (e.g. Devanagari), translate/derive clean English concept
-  if (isNonEnglishScript(spokenText)) {
-    return {
-      mainConcept: `${cleanTitle} Part ${stepIndex + 1}`,
-      primaryNote: `Covers fundamental principles and theoretical mechanisms for ${cleanTitle}.`,
-      secondaryNote: `Technical curriculum analysis and core syllabus formulations.`,
-      example: null,
-    };
-  }
-
-  // Detect and isolate analogies or examples (e.g., pizza, food, cars)
-  let cleanSpoken = (spokenText || "")
+  // Detect and isolate analogies or examples (e.g., pizza, food, cars) for study notes only
+  let cleanSpoken = String(spokenText || "")
     .replace(/["'`:;()\[\]{}|\\/<>]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
+  let exampleText = null;
   const analogyRegex =
     /\b(pizza|burger|sandwich|cookie|cake|coffee|tea|food|eating|delicious|taste|tasty|hungry)\b/i;
-  const hasAnalogy = analogyRegex.test(cleanSpoken);
-
-  let exampleText = null;
-  if (hasAnalogy) {
+  if (analogyRegex.test(cleanSpoken)) {
     exampleText =
       "Food analogy used to illustrate model representation hierarchy";
   } else {
@@ -1086,26 +1087,28 @@ function buildStudyFallback(
     .replace(/\s+/g, " ")
     .trim();
 
-  // Extract meaningful technical tokens
+  // Extract meaningful technical tokens (prioritize Latin/English words even in non-English audio)
   const words = strippedText
     .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOP_WORDS_END.has(w.toLowerCase()));
+    .filter(
+      (w) =>
+        /^[a-zA-Z]{3,}$/.test(w) && !STOP_WORDS_END.has(w.toLowerCase()),
+    );
 
   let conceptName = "";
   if (stepIndex === 0) {
     conceptName = `${cleanTitle} Overview`;
   } else if (words.length >= 2) {
     conceptName = cleanConceptPhrase(words.slice(0, 3).join(" "), 3);
-  } else {
-    conceptName = `${cleanTitle} Part ${stepIndex + 1}`;
+  } else if (words.length === 1) {
+    conceptName = `${cleanConceptPhrase(words[0], 1)} Concept`;
   }
 
-  // Ensure conceptName passes validation and contains no conversational words
   if (!isValidStudyConcept(conceptName)) {
-    conceptName = `${cleanTitle} Part ${stepIndex + 1}`;
+    conceptName = `${cleanTitle} Key Analysis (${timeRange})`;
   }
 
-  // Construct primary explanation and secondary detail
+  // Construct primary explanation and secondary detail without static repetition
   let primaryNote = "";
   let secondaryNote = "";
 
@@ -1122,14 +1125,16 @@ function buildStudyFallback(
 
     if (sentences.length >= 1) {
       primaryNote = cleanDetailPhrase(sentences[0]);
+    } else if (words.length >= 2) {
+      primaryNote = `Analyzes ${words.slice(0, 3).join(" ")} operations and theoretical properties (${timeRange}).`;
     } else {
-      primaryNote = `Examines core technical mechanisms and principles of ${conceptName}.`;
+      primaryNote = `Explores algorithmic principles and implementation mechanisms at ${timeRange}.`;
     }
 
     if (sentences.length >= 2) {
       secondaryNote = cleanDetailPhrase(sentences[1]);
     } else {
-      secondaryNote = `Structural properties and theoretical formulations under ${cleanTitle}.`;
+      secondaryNote = `Domain context and structural formulation under ${cleanTitle}.`;
     }
   }
 
@@ -1849,7 +1854,43 @@ async function renderProgressiveUI(session, upToStepIndex) {
       : studyKeys;
   const isTruncated = studyKeys.length > maxVisibleKeys;
 
-  displayKeys.forEach((key, i) => {
+  // Deduplicate consecutive steps with identical or highly repetitive concept & detail
+  const uniqueDisplayKeys = [];
+  let lastConceptNorm = "";
+  let lastDetailNorm = "";
+
+  for (const key of displayKeys) {
+    const s = steps[key];
+    const cNorm = (s.mainConcept || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+    const dNorm = (s.explanation || s.subBranchB || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+    if (uniqueDisplayKeys.length > 0) {
+      const prevKey = uniqueDisplayKeys[uniqueDisplayKeys.length - 1];
+      const prevStep = steps[prevKey];
+      const prevDNorm = (prevStep.explanation || prevStep.subBranchB || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+      // If both concept and detail repeat, or details are identical/similar boilerplate, skip duplicate node
+      if (
+        (cNorm === lastConceptNorm && dNorm === lastDetailNorm) ||
+        (dNorm === prevDNorm && dNorm.length > 15) ||
+        areSimilarNotes(s.explanation, prevStep.explanation)
+      ) {
+        continue;
+      }
+    }
+
+    uniqueDisplayKeys.push(key);
+    lastConceptNorm = cNorm;
+    lastDetailNorm = dNorm;
+  }
+
+  uniqueDisplayKeys.forEach((key, i) => {
     const step = steps[key];
     const timeTag = formatTime(key * STEP_INTERVAL_SECONDS);
     const cId = "C" + (i + 1);
@@ -1864,11 +1905,11 @@ async function renderProgressiveUI(session, upToStepIndex) {
         : `${rootTitle} Step ${i + 1}`;
     const concept = formatMermaidNodeText(rawConcept, 32, 60);
 
-    const detail = formatMermaidNodeText(
+    // Strip examples and analogies from detail node so the diagram never contains examples
+    const rawDetail = stripExamplesForDiagram(
       step.explanation || step.subBranchB || "",
-      40,
-      110,
     );
+    const detail = formatMermaidNodeText(rawDetail, 40, 110);
 
     mermaidLines.push(
       cId + '["' + (i + 1) + ". " + concept + " (" + timeTag + ')"]',
