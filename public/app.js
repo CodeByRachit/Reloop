@@ -78,6 +78,32 @@ const cacheBadge = document.getElementById('cacheBadge');
 const focusTimer = document.getElementById('focusTimer');
 const videoStartPlaceholder = document.getElementById('videoStartPlaceholder');
 const cachedSessionsList = document.getElementById('cachedSessionsList');
+const backHomeBtn = document.getElementById('backHomeBtn');
+
+if (backHomeBtn) {
+  backHomeBtn.addEventListener('click', async (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    try {
+      syncActiveTabSession();
+      await savePlaybackState(true);
+    } catch {}
+    window.location.href = '/';
+  });
+}
+
+const brandHomeLink = document.querySelector('.brand-link');
+if (brandHomeLink) {
+  brandHomeLink.addEventListener('click', async (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    try {
+      syncActiveTabSession();
+      await savePlaybackState(true);
+    } catch {}
+    window.location.href = '/';
+  });
+}
 
 // Topbar Toggles & Side Inspector Elements
 const toggleNotesBtn = document.getElementById('toggleNotesBtn');
