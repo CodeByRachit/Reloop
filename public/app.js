@@ -81,11 +81,25 @@ const cachedSessionsList = document.getElementById('cachedSessionsList');
 const backHomeBtn = document.getElementById('backHomeBtn');
 
 if (backHomeBtn) {
-  backHomeBtn.addEventListener('click', (e) => {
+  backHomeBtn.addEventListener('click', async (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     try {
       syncActiveTabSession();
-      savePlaybackState(true);
+      await savePlaybackState(true);
+    } catch {}
+    window.location.href = '/';
+  });
+}
+
+const brandHomeLink = document.querySelector('.brand-link');
+if (brandHomeLink) {
+  brandHomeLink.addEventListener('click', async (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    try {
+      syncActiveTabSession();
+      await savePlaybackState(true);
     } catch {}
     window.location.href = '/';
   });
