@@ -787,8 +787,9 @@ HERO PRODUCT MOCKUP
   z-index: 1;
   display: grid;
   place-items: center;
+  width: 24%;
   min-height: 27px;
-  padding: 0 8px;
+  padding: 0 4px;
   border: 1px solid #4a4a4a;
   border-radius: 4px;
   background: #1b1b1b;
@@ -817,12 +818,12 @@ HERO PRODUCT MOCKUP
 
 .node-bottom-left {
   top: 176px;
-  left: 4px;
+  left: 0;
 }
 
 .node-bottom-right {
   top: 176px;
-  right: 4px;
+  right: 0;
 }
 
 .window-footer {
@@ -1009,12 +1010,12 @@ FEATURE CARDS
 .feature-copy {
   position: relative;
   z-index: 2;
-  max-width: 390px;
+  max-width: 100%;
 }
 
 .feature-copy h3 {
-  margin: 22px 0 13px;
-  font-size: 28px;
+  margin: 18px 0 10px;
+  font-size: 23px;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.055em;
@@ -1025,20 +1026,6 @@ FEATURE CARDS
   color: #929292;
   font-size: 12px;
   line-height: 1.85;
-}
-
-.feature-notes .feature-copy h3,
-.feature-map .feature-copy h3,
-.feature-local .feature-copy h3 {
-  max-width: 320px;
-  margin-top: 21px;
-  font-size: 23px;
-}
-
-.feature-notes .feature-copy p,
-.feature-map .feature-copy p,
-.feature-local .feature-copy p {
-  max-width: 365px;
 }
 
 /* Focus illustration */
@@ -1149,8 +1136,7 @@ FEATURE CARDS
 .notes-visual {
   display: grid;
   gap: 10px;
-  margin-top: auto;
-  padding-top: 24px;
+  margin-block: auto;
 }
 
 .fake-note {
@@ -1318,7 +1304,7 @@ FEATURE CARDS
   display: grid;
   place-items: center;
   overflow: hidden;
-  margin-top: auto;
+  margin-top: 15px;
   padding-top: 15px;
 }
 
@@ -1370,7 +1356,7 @@ FEATURE CARDS
 
 .feature-footnote {
   display: block;
-  margin-top: 8px;
+  margin-top: auto;
   color: #777;
   font-size: 8px;
   line-height: 1.6;
@@ -2036,14 +2022,6 @@ MOBILE
     height: 225px;
   }
 
-  .node-left {
-    left: 6px;
-  }
-
-  .node-right {
-    right: 6px;
-  }
-
   .hero-bottom-note {
     margin-top: 43px;
     font-size: 8px;
@@ -2093,22 +2071,16 @@ MOBILE
   .feature-grid {
     grid-template-columns: 1fr;
     grid-template-rows: none;
-    grid-auto-rows: auto;
+    grid-auto-rows: minmax(400px, 1fr);
     gap: 11px;
   }
 
   .feature-card {
-    min-height: 0;
+    min-height: 400px;
     padding: 22px;
   }
 
   .feature-copy h3 {
-    font-size: 25px;
-  }
-
-  .feature-notes .feature-copy h3,
-  .feature-map .feature-copy h3,
-  .feature-local .feature-copy h3 {
     font-size: 22px;
   }
 
@@ -2117,23 +2089,23 @@ MOBILE
   }
 
   .focus-visual {
-    min-height: 260px;
+    min-height: 185px;
     margin-top: 30px;
   }
 
   .ring-outer {
-    width: 220px;
-    height: 220px;
+    width: 160px;
+    height: 160px;
   }
 
   .ring-middle {
-    width: 170px;
-    height: 170px;
+    width: 125px;
+    height: 125px;
   }
 
   .ring-inner {
-    width: 120px;
-    height: 120px;
+    width: 90px;
+    height: 90px;
   }
 
   .focus-label-one {
@@ -2145,7 +2117,7 @@ MOBILE
   }
 
   .notes-visual {
-    margin-top: 25px;
+    margin-block: auto;
   }
 
   .map-visual {
