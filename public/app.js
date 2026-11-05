@@ -35,8 +35,8 @@ const MODELS = {
 };
 
 const STEP_INTERVAL_SECONDS = 15;
-const NOTE_GENERATION_VERSION = 16;
-const CLASSIFICATION_VERSION = 5;
+const NOTE_GENERATION_VERSION = 17;
+const CLASSIFICATION_VERSION = 6;
 const NON_EDUCATIONAL_MESSAGE =
   "This does not appear to be an educational video. Notes are unavailable for this content.";
 const MIN_ZOOM = 0.1; // 10%
@@ -179,9 +179,9 @@ const chapterPillsRow = document.getElementById("chapterPillsRow");
 let videoChapters = [];
 let lastRenderedDuration = 0;
 
-// ============================================================================
+
 // 1. UNLIMITED BROWSER CACHE (IndexedDB)
-// ============================================================================
+
 const DB_NAME = "ReloopBranchingDB_v5";
 const STORE_NAME = "study_sessions";
 
@@ -700,9 +700,9 @@ document.addEventListener("fullscreenchange", () => {
   fullscreenExitIcon.classList.toggle("hidden", !isFullscreen);
 });
 
-// ============================================================================
+
 // 2. LOCAL AI ENGINE
-// ============================================================================
+
 async function ensureWebLLMLoaded(targetModelId) {
   if (mlcEngine && loadedModelId === targetModelId) return mlcEngine;
   if (loadingPromise) return loadingPromise;
@@ -866,14 +866,71 @@ function isPureFillerSegment(text) {
   return false;
 }
 
-function sanitizeMermaidText(text, maxChars = 55) {
+function formatMermaidNodeText(text, maxLineChars = 40, maxTotalChars = 110) {
   if (!text) return "";
-  return String(text)
+  let clean = String(text)
+    // Remove all emojis and variation selectors
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
     .replace(/["#;`]/g, "")
     .replace(/[<>{}[\]()|\\]/g, " ")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxChars);
+    .trim();
+
+  // If text exceeds maxTotalChars, truncate cleanly at word boundary
+  if (clean.length > maxTotalChars) {
+    const slice = clean.slice(0, maxTotalChars);
+    const lastSpace = slice.lastIndexOf(" ");
+    clean = (lastSpace > 20 ? slice.slice(0, lastSpace) : slice).trim();
+  }
+
+  // Wrap at word boundaries
+  const words = clean.split(" ").filter(Boolean);
+  const lines = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!currentLine) {
+      currentLine = word;
+    } else if ((currentLine + " " + word).length <= maxLineChars) {
+      currentLine += " " + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+
+  return lines.join("<br/>");
+}
+
+function cleanLectureTitle(title, maxChars = 75) {
+  if (!title) return "Lecture Overview";
+  let clean = String(title)
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
+    .replace(
+      /[\[\(].*?(full\s*course|crash\s*course|official|hd|4k|tutorial|lecture|202\d).*?[\]\)]/gi,
+      "",
+    )
+    .replace(/["#;`]/g, "")
+    .replace(/[<>{}[\]()|\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (clean.length <= maxChars) return clean;
+
+  const slice = clean.slice(0, maxChars);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > 20 ? slice.slice(0, lastSpace) : slice).trim();
+}
+
+function sanitizeMermaidText(text, maxChars = 80) {
+  return formatMermaidNodeText(text, 36, maxChars);
 }
 
 function cleanExamplePhrase(text) {
@@ -891,7 +948,15 @@ const BANNED_CONCEPT_WORDS =
 function isValidStudyConcept(text) {
   if (!text || typeof text !== "string") return false;
   const clean = text.toLowerCase().trim();
-  if (clean.length < 3 || clean.length > 40) return false;
+  if (clean.length < 3 || clean.length > 50) return false;
+
+  // Reject generic placeholders
+  if (
+    /^(core\s*concept|core\s*principle|topic\s*\d+|concept|untitled)$/i.test(
+      clean,
+    )
+  )
+    return false;
 
   // Reject conversational clauses, sentence fragments, and preambles
   const invalidStart =
@@ -908,19 +973,27 @@ function cleanDetailPhrase(detail) {
   if (!detail || typeof detail !== "string")
     return "Core technical mechanism and property";
   let clean = detail
-    .replace(/^(\⚙️|concept|detail|summary|mechanism)\s*[:.-]\s*/i, "")
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
+    .replace(/^(concept|detail|summary|mechanism)\s*[:.-]\s*/i, "")
     .replace(BANNED_CONCEPT_WORDS, "")
     .replace(/\s+/g, " ")
     .trim();
   if (clean.length < 8) return "Core technical mechanism and property";
-  return compactNote(clean, 16);
+  return compactNote(clean, 20);
 }
 
-function cleanConceptPhrase(rawText, maxWords = 4) {
+function cleanConceptPhrase(rawText, maxWords = 5) {
   if (!rawText || isNonEnglishScript(rawText)) {
-    return "Core Concept";
+    return "";
   }
   let text = (rawText || "")
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
     .replace(/["'`:;()\[\]{}|\\/<>]/g, " ")
     .replace(
       /\b(study assistant|transcript|speaker|in summary|look fair warning|fair warning|talking about pizza|by talking about)\b/gi,
@@ -950,7 +1023,7 @@ function cleanConceptPhrase(rawText, maxWords = 4) {
     words.shift();
   }
 
-  if (words.length === 0) return "Core Principle";
+  if (words.length === 0) return "";
   const result = words.join(" ");
   return result.charAt(0).toUpperCase() + result.slice(1);
 }
@@ -961,7 +1034,7 @@ function buildStudyFallback(
   stepIndex = 0,
   timeRange = "",
 ) {
-  const cleanTitle = cleanConceptPhrase(sessionTitle || "Academic Lecture", 4);
+  const cleanTitle = cleanLectureTitle(sessionTitle || "Academic Lecture", 50);
 
   // If spoken text is non-English script (e.g. Devanagari), translate/derive clean English concept
   if (isNonEnglishScript(spokenText)) {
@@ -1153,7 +1226,11 @@ async function generateMultiBranchStep(
     const raw = await runLocalLLM(systemPrompt, userPrompt, 160);
     const rawText = String(raw || "").trim();
 
-    if (stepIndex > 0 && /status\s*:\s*filler/i.test(rawText)) {
+    if (
+      stepIndex > 0 &&
+      /status\s*:\s*filler/i.test(rawText) &&
+      isPureFillerSegment(spokenText)
+    ) {
       return {
         isStudyMaterial: false,
         timeRange,
@@ -1272,34 +1349,57 @@ function isCorruptedTranscript(text) {
 }
 
 const NON_EDUCATIONAL_PATTERNS = [
-  // Short films, movies, cinema, fictional dramas, sketches
-  /\b(short\s*film|feature\s*film|full\s*movie|movie|film|cinema|trailer|teaser|web\s*series|episode|season\s*\d+|s\d+e\d+|tv\s*show|skit|sketch\s*comedy|scene|scenes|climax\s*scene)\b/i,
-  // Comedy, entertainment, vlogs, pranks, reactions
-  /\b(comedy|funny|prank|pranks|vlog|vlogs|daily\s*vlog|roast|standup\s*comedy|stand-up\s*comedy|standup|meme|memes|parody|tiktok|challenge|reaction\s*video|compilation)\b/i,
-  // Music & songs
-  /\b(official\s*music\s*video|official\s*video|official\s*audio|lyrics\s*video|audio\s*track|full\s*album|vevo|remix|song|songs|jukebox|lyrical\s*video|cover\s*song|music\s*video)\b/i,
-  // Known entertainment / comedy creators & labels
+  // Music videos, full tracks, official songs
+  /\b(official\s+music\s+video|official\s+lyric\s+video|official\s+audio|lyrics?\s+video|audio\s+track|full\s+album|vevo|jukebox|lyrical\s+video|cover\s+song|remix\s+song|video\s+song)\b/i,
+  // Fictional movies, trailers, cinema clips
+  /\b(official\s+trailer|teaser\s+trailer|movie\s+trailer|short\s+film|feature\s+film|full\s+movie|climax\s+scene|action\s+scene|deleted\s+scene)\b/i,
+  // Comedy sketches, pure entertainment, stand-up, pranks, roasts
+  /\b(comedy\s+sketch|skit|sketch\s+comedy|stand-?up\s+comedy|pranks?|funny\s+vines|roast\s+of|parody\s+video|reaction\s+video|tik\s*tok\s+compilation)\b/i,
+  // Known entertainment / comedy channels
   /\b(be\s*you\s*nick|ashish\s*chanchlani|bb\s*ki\s*vines|carryminati|dhar\s*mann|t-series|zee\s*music|sony\s*music|speed\s*records|yrf|round2hell|harsh\s*beniwal)\b/i,
-  // Non-educational gaming & entertainment
-  /\b(gameplay\s*walkthrough\s*part|lets\s*play|let's\s*play|gaming\s*funny\s*moments|montage|stream\s*highlights)\b/i,
+  // Non-educational gaming & pure entertainment playthroughs
+  /\b(gameplay\s+walkthrough\s+part|let'?s\s+play\s+part|gaming\s+funny\s+moments|stream\s+highlights|rage\s+quit)\b/i,
 ];
 
-async function classifyVideoWithLLM(session) {
-  const titleAndDesc =
-    `${session.title || ""} ${session.description || ""}`.toLowerCase();
+const EDUCATIONAL_TITLE_PATTERNS =
+  /\b(tutorial|lecture|course|class|lesson|learn\w*|explained|guide|crash\s*course|algorithm|programming|coding|science|math|mathematics|physics|chemistry|biology|history|exam|preparation|notes|study|concept|data\s*structures?|computer\s*science|how\s*to|development|architecture|machine\s*learning|deep\s*learning|ai|neural|network|comparison|vs|overview|introduction|analysis|fundamentals|principles|theory|masterclass|system\s*design|walkthrough|review|solved|solution|interview|gate|jee|neet|upsc|sat|gre|curriculum|syllabus|engineering|calculus|algebra|geometry|statistics|economics|philosophy|psychology|neuroscience|biochemistry|genetics|mechanics|astronomy|electromagnetism|electronics|circuits|database|sql|devops|docker|kubernetes|security|cybersecurity)\b/i;
 
-  for (const pattern of NON_EDUCATIONAL_PATTERNS) {
-    if (pattern.test(titleAndDesc)) {
+const EDUCATIONAL_TRANSCRIPT_PATTERNS =
+  /\b(for\s+example|we\s+define|in\s+this\s+lecture|let'?s\s+understand|the\s+concept\s+of|how\s+this\s+works|difference\s+between|step\s+one|step\s+two|formula|algorithm|function|property|definition|mechanism|process|principle|important\s+concept|key\s+takeaway|notice\s+that|in\s+other\s+words|theory|structure|calculate|solve|solution|theorem)\b/i;
+
+async function classifyVideoWithLLM(session) {
+  const title = String(session.title || "").trim();
+
+  // 1. FAST-TRACK: If title matches strong educational keywords (and is not an explicit prank/parody)
+  if (EDUCATIONAL_TITLE_PATTERNS.test(title)) {
+    const isExplicitParody =
+      /\b(prank|parody\s+sketch|comedy\s+sketch)\b/i.test(title);
+    if (!isExplicitParody) {
       return {
-        isEducational: false,
-        reason: "Identified as non-educational entertainment / fictional media",
+        isEducational: true,
+        reason: "Matched educational title keywords",
       };
     }
   }
 
+  // 2. High-confidence non-educational patterns in title
+  for (const pattern of NON_EDUCATIONAL_PATTERNS) {
+    if (pattern.test(title)) {
+      return {
+        isEducational: false,
+        reason:
+          "Identified as non-educational entertainment / fictional media from title",
+      };
+    }
+  }
+
+  // 3. Inspect transcript
   const transcript = session.transcript || [];
   if (!transcript.length) {
-    return { isEducational: false, reason: "No transcript available" };
+    return {
+      isEducational: true,
+      reason: "Defaulted to educational (no transcript)",
+    };
   }
 
   const filteredTranscript = transcript.filter((item) => {
@@ -1309,22 +1409,46 @@ async function classifyVideoWithLLM(session) {
   const sourceTranscript =
     filteredTranscript.length >= 8 ? filteredTranscript : transcript;
 
-  const sampleText = sourceTranscript
-    .slice(0, 40)
+  // 4. Quick transcript keyword scan across spoken lines
+  const transcriptExcerpt = sourceTranscript
+    .slice(0, 50)
+    .map((item) => item.text || "")
+    .filter(Boolean)
+    .join(" ");
+
+  const eduMatches = (
+    transcriptExcerpt.match(
+      new RegExp(EDUCATIONAL_TRANSCRIPT_PATTERNS.source, "gi"),
+    ) || []
+  ).length;
+  if (eduMatches >= 2) {
+    return {
+      isEducational: true,
+      reason: "Detected multiple educational explanation patterns in speech",
+    };
+  }
+
+  // 5. Build representative sample for AI (skip opening greeting banter)
+  const startIndex = sourceTranscript.length > 25 ? 12 : 0;
+  const sampleSlice = sourceTranscript.slice(startIndex, startIndex + 35);
+  const sampleText = sampleSlice
     .map((item) => item.text || "")
     .filter(Boolean)
     .join(" ")
-    .slice(0, 1000);
+    .slice(0, 1100);
 
   if (sampleText.trim().length < 25) {
-    return { isEducational: false, reason: "Transcript excerpt too short" };
+    return {
+      isEducational: true,
+      reason: "Transcript excerpt too short, defaulted to educational",
+    };
   }
 
   const systemPrompt = [
-    "You are a strict educational video classifier.",
-    "Classify the content as EDUCATIONAL or NON_EDUCATIONAL.",
-    "EDUCATIONAL: Lectures, tutorials, instructional guides, academic courses, technical explanations, coding, math, science, history, academic analysis.",
-    "NON_EDUCATIONAL: Short films, movies, comedy sketches, fictional stories, character dialogue, vlogs, pranks, music, reactions, gaming entertainment, casual banter.",
+    "You are an educational video classifier.",
+    "TASK: Determine whether this video contains educational, instructional, academic, tutorial, explainer, or informational content (such as lectures, tutorials, coding, science, math, history, philosophy, skill guides, or concept explanations).",
+    "NOTE: Educational videos often have conversational intros, humor, or real-world examples. If the speaker explains, teaches, or demonstrates concepts or skills, classify as EDUCATIONAL.",
+    "Only classify as NON_EDUCATIONAL if it is purely non-educational entertainment with no instructional purpose (such as music videos, fictional movies, comedy sketches, pranks, or gaming playthroughs).",
     "Output exactly ONE word: EDUCATIONAL or NON_EDUCATIONAL.",
   ].join("\n");
 
@@ -1342,39 +1466,35 @@ async function classifyVideoWithLLM(session) {
       .trim()
       .toUpperCase();
 
-    if (
-      reply.includes("NON_EDUCATIONAL") ||
-      reply.includes("NON-EDUCATIONAL") ||
-      reply.includes("NOT EDUCATIONAL") ||
-      reply.includes("ENTERTAINMENT") ||
-      reply.includes("SHORT FILM") ||
-      reply.includes("COMEDY") ||
-      reply.includes("FICTION")
-    ) {
-      return {
-        isEducational: false,
-        reason: "Classified as non-educational entertainment by AI",
-      };
-    }
+    const isNonEd = /\b(NON[-_ ]EDUCATIONAL|NOT[-_ ]EDUCATIONAL)\b/i.test(
+      reply,
+    );
+    const isEd = /\bEDUCATIONAL\b/i.test(reply);
 
-    if (reply.includes("EDUCATIONAL")) {
+    if (isEd && !isNonEd) {
       return {
         isEducational: true,
         reason: "Verified educational lecture by AI",
+      };
+    }
+
+    if (isNonEd && !isEd) {
+      return {
+        isEducational: false,
+        reason: "Classified as non-educational entertainment by AI",
       };
     }
   } catch (err) {
     console.warn("Local LLM classification timed out or failed:", err);
   }
 
-  // Fallback: Check if title has genuine educational markers
-  const EDUCATIONAL_TITLE_PATTERNS =
-    /\b(tutorial|lecture|course|class|lesson|learn\w*|explained|guide|crash course|algorithm|programming|coding|science|math|mathematics|physics|chemistry|biology|history|exam|preparation|notes|study|concept|data structures|computer science|how to|development|architecture|machine\s*learning|deep\s*learning|ai|neural|network|comparison|vs|overview|introduction|analysis)\b/i;
-
+  // Fallback: Check if title or description has genuine educational markers
+  const titleAndDesc =
+    `${session.title || ""} ${session.description || ""}`.toLowerCase();
   if (EDUCATIONAL_TITLE_PATTERNS.test(titleAndDesc)) {
     return {
       isEducational: true,
-      reason: "Matched educational title keywords",
+      reason: "Matched educational keywords in fallback",
     };
   }
 
@@ -1389,11 +1509,33 @@ function showNonEducationalContentMessage() {
   }
   mermaidContainer.innerHTML = `
     <div class="empty-diagram-msg" style="max-width: 440px; margin: auto; padding: 48px 20px; text-align: center;">
-      <div style="font-size: 2.2rem; margin-bottom: 12px;">🚫</div>
+      <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); margin-bottom: 8px;">Notice</div>
       <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">Non-Educational Content</div>
-      <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">${NON_EDUCATIONAL_MESSAGE}</div>
+      <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">${NON_EDUCATIONAL_MESSAGE}</div>
+      <button id="forceStudyModeBtn" style="font-size: 0.8rem; font-weight: 500; padding: 7px 16px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color, #3f3f46); background: var(--bg-secondary, #27272a); color: var(--text-primary, #f4f4f5); transition: background 0.15s ease;">
+        Generate Notes Anyway
+      </button>
     </div>
   `;
+
+  const forceBtn = document.getElementById("forceStudyModeBtn");
+  if (forceBtn) {
+    forceBtn.onclick = async () => {
+      if (!currentVideoId) return;
+      let session = await getCachedSession(currentVideoId);
+      if (!session) return;
+      session = await saveCachedSession(currentVideoId, {
+        contentType: "educational",
+        classificationVersion: CLASSIFICATION_VERSION,
+      });
+      if (chaptersTimelineSection) {
+        chaptersTimelineSection.classList.remove("hidden");
+      }
+      diagramStatus.textContent = "Starting study notes indexing...";
+      await processStepAtTime(0, true);
+      await renderProgressiveUI(session, 0);
+    };
+  }
 }
 
 function createUnavailableNote(timeRange, message) {
@@ -1688,14 +1830,15 @@ async function renderProgressiveUI(session, upToStepIndex) {
     studyNotes.scrollTop = studyNotes.scrollHeight;
   }
 
-  const rootTitle = cleanConceptPhrase(session.title || "Lecture Overview", 4);
+  const rootTitle = cleanLectureTitle(session.title || "Lecture Overview", 60);
+  const rootLabel = formatMermaidNodeText(rootTitle, 36, 75);
   const mermaidLines = [
     "flowchart TD",
-    'ROOT(["📘 ' + sanitizeMermaidText(rootTitle, 40) + '"])',
-    "classDef default fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-family:Inter;",
-    "classDef rootNode fill:#3f3f46,stroke:#52525b,stroke-width:2px,color:#ffffff,font-weight:bold;",
-    "classDef conceptNode fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#dbeafe,font-weight:600;",
-    "classDef detailNode fill:#18181b,stroke:#52525b,stroke-width:1.2px,color:#d4d4d8,font-size:12px;",
+    'ROOT(["' + rootLabel + '"])',
+    "classDef default fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-family:Inter,system-ui,sans-serif;",
+    "classDef rootNode fill:#27272a,stroke:#52525b,stroke-width:2px,color:#ffffff,font-weight:700,font-size:14px;",
+    "classDef conceptNode fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,font-weight:600,font-size:13px;",
+    "classDef detailNode fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-size:12.5px;",
     "class ROOT rootNode;",
   ];
 
@@ -1712,13 +1855,19 @@ async function renderProgressiveUI(session, upToStepIndex) {
     const cId = "C" + (i + 1);
     const dId = "D" + (i + 1);
 
-    const concept = sanitizeMermaidText(
-      step.mainConcept || "Topic " + (i + 1),
-      35,
-    );
-    const detail = sanitizeMermaidText(
+    const rawConcept =
+      step.mainConcept &&
+      !/^(core\s*concept|core\s*principle|topic\s*\d+|concept)$/i.test(
+        step.mainConcept.trim(),
+      )
+        ? step.mainConcept
+        : `${rootTitle} Step ${i + 1}`;
+    const concept = formatMermaidNodeText(rawConcept, 32, 60);
+
+    const detail = formatMermaidNodeText(
       step.explanation || step.subBranchB || "",
-      55,
+      40,
+      110,
     );
 
     mermaidLines.push(
@@ -1740,7 +1889,7 @@ async function renderProgressiveUI(session, upToStepIndex) {
       detail.toLowerCase() !== "supporting detail" &&
       detail.toLowerCase() !== "none"
     ) {
-      mermaidLines.push(dId + '("⚙️ ' + detail + '")');
+      mermaidLines.push(dId + '("' + detail + '")');
       mermaidLines.push(cId + " -.-> " + dId);
       mermaidLines.push("class " + dId + " detailNode;");
     }
@@ -1836,9 +1985,9 @@ async function renderMermaid(code) {
   }
 }
 
-// ============================================================================
+
 // 4. HIGH-RANGE ZOOM (10% TO 800%) + DRAG-TO-PAN + WHEEL ZOOM
-// ============================================================================
+
 function applyZoomAndPan() {
   const target = document.getElementById("mermaidZoomTarget");
   if (target) {
@@ -1898,9 +2047,8 @@ window.addEventListener("mouseup", () => {
   mermaidContainer.classList.remove("dragging");
 });
 
-// ============================================================================
+
 // 5. START BUTTON, CONTINUOUS WATCH LOOP & FULLSCREEN LOCK (DIRECT POPUP FIXED)
-// ============================================================================
 startStudyBtn.addEventListener("click", async () => {
   const url = ytUrlInput.value.trim();
   const videoId = extractVideoId(url);
