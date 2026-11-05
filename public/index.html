@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Reloop — Focused Study Workspace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script src="https://www.youtube.com/iframe_api"></script>
 </head>
+
 <body>
 
   <!-- Top Navigation Bar -->
@@ -37,11 +41,21 @@
 
     <div class="topbar-actions">
       <button id="toggleNotesBtn" class="btn-toggle" type="button" title="View Lecture Notes">
-        <svg viewBox="0 0 24 24" class="btn-icon-svg" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <svg viewBox="0 0 24 24" class="btn-icon-svg" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
         <span>Notes</span>
       </button>
       <button id="toggleDiagramBtn" class="btn-toggle" type="button" title="View Concept Map">
-        <svg viewBox="0 0 24 24" class="btn-icon-svg" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <svg viewBox="0 0 24 24" class="btn-icon-svg" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+        </svg>
         <span>Concept Map</span>
       </button>
     </div>
@@ -63,12 +77,107 @@
             <div class="placeholder-box">
               <span class="eyebrow">SESSION STANDBY</span>
               <h2>No Lecture Loaded</h2>
-              <p>Paste a YouTube lecture URL in the toolbar above to initialize focus mode, real-time note extraction, and progressive concept mapping.</p>
+              <p>Paste a YouTube lecture URL in the toolbar above to initialize focus mode, real-time note extraction,
+                and progressive concept mapping.</p>
               <div id="cachedSessionsList" class="cached-list"></div>
             </div>
           </div>
           <div id="player"></div>
         </div>
+
+        <div class="playback-controls" aria-label="Video playback controls">
+          <div class="playback-buttons">
+
+            <button id="skipBackBtn" class="btn-icon playback-control" type="button" aria-label="Skip back 10 seconds"
+              title="Back 10 seconds" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 8V4m0 4h4M4.8 8a8 8 0 1 1-.2 7" />
+                <path d="M10 10h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z" />
+              </svg>
+            </button>
+
+            <button id="playPauseBtn" class="btn-icon playback-control" type="button" aria-label="Play video"
+              title="Play" disabled>
+              <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 5 11 7-11 7V5Z" />
+              </svg>
+              <svg class="pause-icon hidden" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 5h4v14H7zM15 5h4v14h-4z" />
+              </svg>
+            </button>
+
+            <button id="skipForwardBtn" class="btn-icon playback-control" type="button"
+              aria-label="Skip forward 10 seconds" title="Forward 10 seconds" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 8V4m0 4h-4m3.2 0a8 8 0 1 0 .2 7" />
+                <path
+                  d="M5 10h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Zm5 0h2v6m3-6h1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z" />
+              </svg>
+            </button>
+
+          </div>
+
+          <div class="playback-timeline">
+            <span id="playbackCurrentTime" class="playback-time mono-text">0:00</span>
+
+            <input id="playbackSeek" class="playback-control" type="range" min="0" max="0" step="0.1" value="0"
+              aria-label="Seek video" disabled />
+
+            <span id="playbackDuration" class="playback-time mono-text">0:00</span>
+
+          </div>
+
+          <div class="playback-options">
+
+            <label class="playback-option" title="Playback speed">
+              <select id="playbackSpeed" class="playback-control" aria-label="Playback speed" disabled>
+                <option value="0.25">0.25×</option>
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="1.75">1.75×</option>
+                <option value="2">2×</option>
+              </select>
+            </label>
+
+            <label class="playback-option volume-option" aria-label="Video volume">
+
+              <button id="muteBtn" class="btn-icon playback-control" type="button" aria-label="Mute video" title="Mute"
+                disabled>
+                <svg class="volume-on-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+                  <path class="volume-waves" d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13" />
+                </svg>
+                <svg class="volume-off-icon hidden" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M11 5 6 9H3v6h3l5 4V5Zm5 4 5 6m0-6-5 6" />
+                </svg>
+              </button>
+
+              <input id="playbackVolume" class="playback-control volume-slider" type="range" min="0" max="100" step="1"
+                value="100" aria-label="Video volume" disabled />
+
+            </label>
+
+            <button id="captionsBtn" class="btn-small playback-control captions-button" type="button"
+              aria-label="Turn captions on" aria-pressed="false" title="Captions" disabled>
+              CC
+            </button>
+
+            <button id="fullscreenBtn" class="btn-icon playback-control" type="button" aria-label="Enter fullscreen"
+              title="Fullscreen" disabled>
+              <svg class="fullscreen-enter-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4" />
+              </svg>
+              <svg class="fullscreen-exit-icon hidden" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 4v4H4m12-4v4h4M4 16h4v4m12-4h-4v4" />
+              </svg>
+            </button>
+
+          </div>
+        </div>
+
 
         <!-- Video Chapters / Key Topic Segments Timeline Bar -->
         <div class="chapters-timeline-section" id="chaptersTimelineSection">
@@ -81,7 +190,8 @@
           </div>
 
           <!-- Straight line with points in between covering key concepts -->
-          <div class="chapter-track-wrapper" id="chapterTrackWrapper" title="Click any point or along the timeline to jump to that key concept">
+          <div class="chapter-track-wrapper" id="chapterTrackWrapper"
+            title="Click any point or along the timeline to jump to that key concept">
             <div class="chapter-track-base">
               <div class="chapter-track-progress" id="chapterTrackProgress"></div>
               <div class="chapter-markers-container" id="chapterMarkersContainer"></div>
@@ -100,7 +210,7 @@
     </div>
 
     <!-- Right Side Panel: Hosts Notes/Map (Top) + Timestamps (Bottom/Full) -->
-<aside class="side-inspector" id="sideInspector">
+    <aside class="side-inspector" id="sideInspector">
 
       <!-- TOP HALF WRAPPER (Initially Hidden: Open tabhi hoga jab button click ho) -->
       <div class="inspector-top-wrapper hidden" id="inspectorTopWrapper">
@@ -110,7 +220,10 @@
           </div>
           <div class="inspector-header-right">
             <button id="closeInspectorBtn" class="btn-icon" type="button" title="Close" aria-label="Close">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
             </button>
           </div>
         </div>
@@ -126,7 +239,8 @@
                 </div>
                 <span id="focusTimer" class="mono-badge">00:00</span>
               </div>
-              <textarea id="studyNotes" placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
+              <textarea id="studyNotes"
+                placeholder="Structured lecture notes will populate here chronologically as you progress through the video..."></textarea>
             </div>
           </div>
 
@@ -157,7 +271,8 @@
       </div>
 
       <!-- Horizontal Resizer between Top Wrapper and Timestamps -->
-      <div class="inspector-section-resizer" id="inspectorSectionResizer" title="Drag up or down to resize panels" aria-label="Resize panels" role="separator" aria-orientation="horizontal">
+      <div class="inspector-section-resizer" id="inspectorSectionResizer" title="Drag up or down to resize panels"
+        aria-label="Resize panels" role="separator" aria-orientation="horizontal">
         <div class="resizer-horizontal-line"></div>
       </div>
 
@@ -202,4 +317,5 @@
 
   <script type="module" src="app.js"></script>
 </body>
+
 </html>
