@@ -6,13 +6,13 @@ mermaid.initialize({
   theme: 'base',
   suppressErrorRendering: true,
   themeVariables: {
-    background: '#ffffff',
-    primaryColor: '#ffffff',
-    primaryTextColor: '#09090b',
-    primaryBorderColor: '#18181b',
-    lineColor: '#52525b',
-    secondaryColor: '#f4f4f5',
-    tertiaryColor: '#fafafa',
+    background: '#111113',
+    primaryColor: '#18181b',
+    primaryTextColor: '#f4f4f5',
+    primaryBorderColor: '#3f3f46',
+    lineColor: '#a1a1aa',
+    secondaryColor: '#1f1f23',
+    tertiaryColor: '#27272a',
     fontFamily: 'Inter, -apple-system, sans-serif',
     fontSize: '14px'
   },
@@ -78,32 +78,26 @@ const cacheBadge = document.getElementById('cacheBadge');
 const focusTimer = document.getElementById('focusTimer');
 const videoStartPlaceholder = document.getElementById('videoStartPlaceholder');
 const cachedSessionsList = document.getElementById('cachedSessionsList');
-const backHomeBtn = document.getElementById('backHomeBtn');
 
-if (backHomeBtn) {
-  backHomeBtn.addEventListener('click', async (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
+async function navigateHome(e) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  try {
+    syncActiveTabSession();
+    await savePlaybackState(true);
+  } catch {}
+  if (document.fullscreenElement) {
     try {
-      syncActiveTabSession();
-      await savePlaybackState(true);
-    } catch {}
-    window.location.href = '/';
-  });
+      await document.exitFullscreen();
+    } catch (error) {
+      console.error('Unable to exit fullscreen before opening home:', error);
+    }
+  }
+  window.location.assign('/');
 }
 
 const brandHomeLink = document.querySelector('.brand-link');
-if (brandHomeLink) {
-  brandHomeLink.addEventListener('click', async (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
-    try {
-      syncActiveTabSession();
-      await savePlaybackState(true);
-    } catch {}
-    window.location.href = '/';
-  });
-}
+if (brandHomeLink) brandHomeLink.addEventListener('click', navigateHome);
 
 // Topbar Toggles & Side Inspector Elements
 const toggleNotesBtn = document.getElementById('toggleNotesBtn');
@@ -1207,10 +1201,10 @@ async function renderProgressiveUI(session, upToStepIndex) {
   const mermaidLines = [
     'flowchart TD',
     'ROOT(["📘 ' + sanitizeMermaidText(rootTitle, 40) + '"])',
-    'classDef default fill:#ffffff,stroke:#18181b,stroke-width:1.5px,color:#09090b,font-family:Inter;',
-    'classDef rootNode fill:#18181b,stroke:#18181b,stroke-width:2px,color:#ffffff,font-weight:bold;',
-    'classDef conceptNode fill:#ffffff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a,font-weight:600;',
-    'classDef detailNode fill:#f8fafc,stroke:#64748b,stroke-width:1.2px,color:#334155,font-size:12px;',
+    'classDef default fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-family:Inter;',
+    'classDef rootNode fill:#3f3f46,stroke:#52525b,stroke-width:2px,color:#ffffff,font-weight:bold;',
+    'classDef conceptNode fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#dbeafe,font-weight:600;',
+    'classDef detailNode fill:#18181b,stroke:#52525b,stroke-width:1.2px,color:#d4d4d8,font-size:12px;',
     'class ROOT rootNode;'
   ];
 
@@ -1415,7 +1409,6 @@ startStudyBtn.addEventListener('click', async () => {
       console.error('Unable to enter fullscreen for study session:', error);
     }
   }
-
   let session = await getCachedSession(videoId);
   if (!session || !session.transcript || typeof session.description !== 'string' || session.description.length === 0) {
     cacheBadge.textContent = 'Fetching Details...';
