@@ -6,13 +6,13 @@ mermaid.initialize({
   theme: 'base',
   suppressErrorRendering: true,
   themeVariables: {
-    background: '#ffffff',
-    primaryColor: '#ffffff',
-    primaryTextColor: '#09090b',
-    primaryBorderColor: '#18181b',
-    lineColor: '#52525b',
-    secondaryColor: '#f4f4f5',
-    tertiaryColor: '#fafafa',
+    background: '#111113',
+    primaryColor: '#18181b',
+    primaryTextColor: '#f4f4f5',
+    primaryBorderColor: '#3f3f46',
+    lineColor: '#a1a1aa',
+    secondaryColor: '#1f1f23',
+    tertiaryColor: '#27272a',
     fontFamily: 'Inter, -apple-system, sans-serif',
     fontSize: '14px'
   },
@@ -78,37 +78,32 @@ const cacheBadge = document.getElementById('cacheBadge');
 const focusTimer = document.getElementById('focusTimer');
 const videoStartPlaceholder = document.getElementById('videoStartPlaceholder');
 const cachedSessionsList = document.getElementById('cachedSessionsList');
-const backHomeBtn = document.getElementById('backHomeBtn');
 
-if (backHomeBtn) {
-  backHomeBtn.addEventListener('click', async (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
+async function navigateHome(e) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  try {
+    syncActiveTabSession();
+    await savePlaybackState(true);
+  } catch {}
+  if (document.fullscreenElement) {
     try {
-      syncActiveTabSession();
-      await savePlaybackState(true);
-    } catch {}
-    window.location.href = '/';
-  });
+      await document.exitFullscreen();
+    } catch (error) {
+      console.error('Unable to exit fullscreen before opening home:', error);
+    }
+  }
+  window.location.assign('/');
 }
 
 const brandHomeLink = document.querySelector('.brand-link');
-if (brandHomeLink) {
-  brandHomeLink.addEventListener('click', async (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
-    try {
-      syncActiveTabSession();
-      await savePlaybackState(true);
-    } catch {}
-    window.location.href = '/';
-  });
-}
+if (brandHomeLink) brandHomeLink.addEventListener('click', navigateHome);
 
 // Topbar Toggles & Side Inspector Elements
 const toggleNotesBtn = document.getElementById('toggleNotesBtn');
 const toggleDiagramBtn = document.getElementById('toggleDiagramBtn');
 const workspaceResizer = document.getElementById('workspaceResizer');
+const inspectorSectionResizer = document.getElementById('inspectorSectionResizer');
 const sideInspector = document.getElementById('sideInspector');
 const inspectorTitle = document.getElementById('inspectorTitle');
 const closeInspectorBtn = document.getElementById('closeInspectorBtn');
@@ -1207,10 +1202,10 @@ async function renderProgressiveUI(session, upToStepIndex) {
   const mermaidLines = [
     'flowchart TD',
     'ROOT(["📘 ' + sanitizeMermaidText(rootTitle, 40) + '"])',
-    'classDef default fill:#ffffff,stroke:#18181b,stroke-width:1.5px,color:#09090b,font-family:Inter;',
-    'classDef rootNode fill:#18181b,stroke:#18181b,stroke-width:2px,color:#ffffff,font-weight:bold;',
-    'classDef conceptNode fill:#ffffff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a,font-weight:600;',
-    'classDef detailNode fill:#f8fafc,stroke:#64748b,stroke-width:1.2px,color:#334155,font-size:12px;',
+    'classDef default fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-family:Inter;',
+    'classDef rootNode fill:#3f3f46,stroke:#52525b,stroke-width:2px,color:#ffffff,font-weight:bold;',
+    'classDef conceptNode fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#dbeafe,font-weight:600;',
+    'classDef detailNode fill:#18181b,stroke:#52525b,stroke-width:1.2px,color:#d4d4d8,font-size:12px;',
     'class ROOT rootNode;'
   ];
 
@@ -1415,7 +1410,6 @@ startStudyBtn.addEventListener('click', async () => {
       console.error('Unable to enter fullscreen for study session:', error);
     }
   }
-
   let session = await getCachedSession(videoId);
   if (!session || !session.transcript || typeof session.description !== 'string' || session.description.length === 0) {
     cacheBadge.textContent = 'Fetching Details...';
@@ -1823,6 +1817,14 @@ function initResizableWorkspace() {
     sideInspector.style.setProperty('--side-panel-width', `${w}px`);
   }
 
+  const savedTopRatio = localStorage.getItem('reloop_inspector_top_ratio');
+  if (savedTopRatio) {
+    const ratio = Math.max(15, Math.min(85, parseFloat(savedTopRatio)));
+    if (Number.isFinite(ratio)) {
+      sideInspector.style.setProperty('--inspector-top-height', `${ratio}%`);
+    }
+  }
+
   // Right sidebar hamesha open rahega taaki Timestamps 100% display ho
   sideInspector.classList.remove('collapsed');
   if (workspaceResizer) workspaceResizer.classList.remove('collapsed');
@@ -1928,6 +1930,61 @@ function initResizableWorkspace() {
       sideInspector.style.width = `${defaultW}px`;
       sideInspector.style.setProperty('--side-panel-width', `${defaultW}px`);
       localStorage.setItem('reloop_side_width', defaultW);
+    });
+  }
+
+  // Horizontal Section Resizer dragging logic (between Top Notes/Map and Bottom Timestamps)
+  if (inspectorSectionResizer) {
+    let isVerticalResizing = false;
+
+    inspectorSectionResizer.addEventListener('pointerdown', (e) => {
+      if (inspectorTopWrapper.classList.contains('hidden')) return;
+
+      isVerticalResizing = true;
+      sideInspector.classList.add('is-dragging-vertical');
+      inspectorSectionResizer.classList.add('is-dragging');
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+      inspectorSectionResizer.setPointerCapture(e.pointerId);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isVerticalResizing) return;
+      const inspectorRect = sideInspector.getBoundingClientRect();
+      if (inspectorRect.height <= 0) return;
+
+      const rawHeight = e.clientY - inspectorRect.top;
+      // Allow comfortable range: min 120px for top, min 100px for timestamps
+      const clampedHeight = Math.max(120, Math.min(inspectorRect.height - 100, rawHeight));
+      const ratio = (clampedHeight / inspectorRect.height) * 100;
+
+      sideInspector.style.setProperty('--inspector-top-height', `${ratio.toFixed(2)}%`);
+
+      if (activeInspectorTab === 'diagram') {
+        applyZoomAndPan();
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (!isVerticalResizing) return;
+      isVerticalResizing = false;
+      sideInspector.classList.remove('is-dragging-vertical');
+      inspectorSectionResizer.classList.remove('is-dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      const currentVal = sideInspector.style.getPropertyValue('--inspector-top-height');
+      if (currentVal) {
+        localStorage.setItem('reloop_inspector_top_ratio', parseFloat(currentVal));
+      }
+    });
+
+    inspectorSectionResizer.addEventListener('dblclick', () => {
+      sideInspector.style.setProperty('--inspector-top-height', '50%');
+      localStorage.removeItem('reloop_inspector_top_ratio');
+      if (activeInspectorTab === 'diagram') {
+        applyZoomAndPan();
+      }
     });
   }
 }
