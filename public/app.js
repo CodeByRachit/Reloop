@@ -109,6 +109,7 @@ if (brandHomeLink) {
 const toggleNotesBtn = document.getElementById('toggleNotesBtn');
 const toggleDiagramBtn = document.getElementById('toggleDiagramBtn');
 const workspaceResizer = document.getElementById('workspaceResizer');
+const inspectorSectionResizer = document.getElementById('inspectorSectionResizer');
 const sideInspector = document.getElementById('sideInspector');
 const inspectorTitle = document.getElementById('inspectorTitle');
 const closeInspectorBtn = document.getElementById('closeInspectorBtn');
@@ -1823,6 +1824,14 @@ function initResizableWorkspace() {
     sideInspector.style.setProperty('--side-panel-width', `${w}px`);
   }
 
+  const savedTopRatio = localStorage.getItem('reloop_inspector_top_ratio');
+  if (savedTopRatio) {
+    const ratio = Math.max(15, Math.min(85, parseFloat(savedTopRatio)));
+    if (Number.isFinite(ratio)) {
+      sideInspector.style.setProperty('--inspector-top-height', `${ratio}%`);
+    }
+  }
+
   // Right sidebar hamesha open rahega taaki Timestamps 100% display ho
   sideInspector.classList.remove('collapsed');
   if (workspaceResizer) workspaceResizer.classList.remove('collapsed');
@@ -1928,6 +1937,61 @@ function initResizableWorkspace() {
       sideInspector.style.width = `${defaultW}px`;
       sideInspector.style.setProperty('--side-panel-width', `${defaultW}px`);
       localStorage.setItem('reloop_side_width', defaultW);
+    });
+  }
+
+  // Horizontal Section Resizer dragging logic (between Top Notes/Map and Bottom Timestamps)
+  if (inspectorSectionResizer) {
+    let isVerticalResizing = false;
+
+    inspectorSectionResizer.addEventListener('pointerdown', (e) => {
+      if (inspectorTopWrapper.classList.contains('hidden')) return;
+
+      isVerticalResizing = true;
+      sideInspector.classList.add('is-dragging-vertical');
+      inspectorSectionResizer.classList.add('is-dragging');
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+      inspectorSectionResizer.setPointerCapture(e.pointerId);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isVerticalResizing) return;
+      const inspectorRect = sideInspector.getBoundingClientRect();
+      if (inspectorRect.height <= 0) return;
+
+      const rawHeight = e.clientY - inspectorRect.top;
+      // Allow comfortable range: min 120px for top, min 100px for timestamps
+      const clampedHeight = Math.max(120, Math.min(inspectorRect.height - 100, rawHeight));
+      const ratio = (clampedHeight / inspectorRect.height) * 100;
+
+      sideInspector.style.setProperty('--inspector-top-height', `${ratio.toFixed(2)}%`);
+
+      if (activeInspectorTab === 'diagram') {
+        applyZoomAndPan();
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (!isVerticalResizing) return;
+      isVerticalResizing = false;
+      sideInspector.classList.remove('is-dragging-vertical');
+      inspectorSectionResizer.classList.remove('is-dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      const currentVal = sideInspector.style.getPropertyValue('--inspector-top-height');
+      if (currentVal) {
+        localStorage.setItem('reloop_inspector_top_ratio', parseFloat(currentVal));
+      }
+    });
+
+    inspectorSectionResizer.addEventListener('dblclick', () => {
+      sideInspector.style.setProperty('--inspector-top-height', '50%');
+      localStorage.removeItem('reloop_inspector_top_ratio');
+      if (activeInspectorTab === 'diagram') {
+        applyZoomAndPan();
+      }
     });
   }
 }

@@ -712,7 +712,8 @@ input:focus {
   position: relative;
 }
 
-.side-inspector.is-dragging {
+.side-inspector.is-dragging,
+.side-inspector.is-dragging-vertical {
   transition: none !important;
   user-select: none;
 }
@@ -721,18 +722,51 @@ input:focus {
    TOP HALF: Notes / Concept Map Wrapper
    ---------------------------------------------------------------------------- */
 .inspector-top-wrapper {
-  height: 50% !important;
-  flex: 0 0 50% !important;
+  height: var(--inspector-top-height, 50%);
+  flex: 0 0 var(--inspector-top-height, 50%);
   display: flex;
   flex-direction: column;
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   background: var(--bg-surface);
   overflow: hidden;
   box-sizing: border-box;
+  min-height: 120px;
 }
 
 /* JAB TOP CLOSED HO -> COMPLETELY HIDE */
 .inspector-top-wrapper.hidden {
+  display: none !important;
+}
+
+/* Horizontal Resizer between Top Notes/Map and Bottom Timestamps */
+.inspector-section-resizer {
+  height: 10px;
+  margin: -5px 0;
+  cursor: row-resize;
+  position: relative;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.resizer-horizontal-line {
+  width: 100%;
+  height: 2px;
+  background: var(--border-color);
+  transition: background 0.15s ease, height 0.15s ease;
+}
+
+.inspector-section-resizer:hover .resizer-horizontal-line,
+.inspector-section-resizer.is-dragging .resizer-horizontal-line {
+  background: var(--accent-primary);
+  height: 4px;
+}
+
+.inspector-top-wrapper.hidden ~ .inspector-section-resizer {
   display: none !important;
 }
 
@@ -886,8 +920,9 @@ textarea#studyNotes:focus {
    BOTTOM HALF: Timestamps Section
    ============================================================================ */
 .timestamps-section {
-  height: 50% !important;
-  flex: 1 1 50% !important;
+  flex: 1 1 0;
+  height: auto;
+  min-height: 100px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -898,7 +933,6 @@ textarea#studyNotes:focus {
   margin: 0;
   overflow: hidden;
   box-sizing: border-box;
-  min-height: 0;
 }
 
 /* JAB TOP WRAPPER HIDDEN HO -> TIMESTAMPS 100% FULL SCREEN */
