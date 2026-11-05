@@ -35,7 +35,7 @@ const MODELS = {
 };
 
 const STEP_INTERVAL_SECONDS = 15;
-const NOTE_GENERATION_VERSION = 16;
+const NOTE_GENERATION_VERSION = 17;
 const CLASSIFICATION_VERSION = 6;
 const NON_EDUCATIONAL_MESSAGE =
   "This does not appear to be an educational video. Notes are unavailable for this content.";
@@ -179,9 +179,9 @@ const chapterPillsRow = document.getElementById("chapterPillsRow");
 let videoChapters = [];
 let lastRenderedDuration = 0;
 
-// ============================================================================
+
 // 1. UNLIMITED BROWSER CACHE (IndexedDB)
-// ============================================================================
+
 const DB_NAME = "ReloopBranchingDB_v5";
 const STORE_NAME = "study_sessions";
 
@@ -700,9 +700,9 @@ document.addEventListener("fullscreenchange", () => {
   fullscreenExitIcon.classList.toggle("hidden", !isFullscreen);
 });
 
-// ============================================================================
+
 // 2. LOCAL AI ENGINE
-// ============================================================================
+
 async function ensureWebLLMLoaded(targetModelId) {
   if (mlcEngine && loadedModelId === targetModelId) return mlcEngine;
   if (loadingPromise) return loadingPromise;
@@ -866,14 +866,71 @@ function isPureFillerSegment(text) {
   return false;
 }
 
-function sanitizeMermaidText(text, maxChars = 55) {
+function formatMermaidNodeText(text, maxLineChars = 40, maxTotalChars = 110) {
   if (!text) return "";
-  return String(text)
+  let clean = String(text)
+    // Remove all emojis and variation selectors
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
     .replace(/["#;`]/g, "")
     .replace(/[<>{}[\]()|\\]/g, " ")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxChars);
+    .trim();
+
+  // If text exceeds maxTotalChars, truncate cleanly at word boundary
+  if (clean.length > maxTotalChars) {
+    const slice = clean.slice(0, maxTotalChars);
+    const lastSpace = slice.lastIndexOf(" ");
+    clean = (lastSpace > 20 ? slice.slice(0, lastSpace) : slice).trim();
+  }
+
+  // Wrap at word boundaries
+  const words = clean.split(" ").filter(Boolean);
+  const lines = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!currentLine) {
+      currentLine = word;
+    } else if ((currentLine + " " + word).length <= maxLineChars) {
+      currentLine += " " + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+
+  return lines.join("<br/>");
+}
+
+function cleanLectureTitle(title, maxChars = 75) {
+  if (!title) return "Lecture Overview";
+  let clean = String(title)
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
+    .replace(
+      /[\[\(].*?(full\s*course|crash\s*course|official|hd|4k|tutorial|lecture|202\d).*?[\]\)]/gi,
+      "",
+    )
+    .replace(/["#;`]/g, "")
+    .replace(/[<>{}[\]()|\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (clean.length <= maxChars) return clean;
+
+  const slice = clean.slice(0, maxChars);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > 20 ? slice.slice(0, lastSpace) : slice).trim();
+}
+
+function sanitizeMermaidText(text, maxChars = 80) {
+  return formatMermaidNodeText(text, 36, maxChars);
 }
 
 function cleanExamplePhrase(text) {
@@ -891,7 +948,15 @@ const BANNED_CONCEPT_WORDS =
 function isValidStudyConcept(text) {
   if (!text || typeof text !== "string") return false;
   const clean = text.toLowerCase().trim();
-  if (clean.length < 3 || clean.length > 40) return false;
+  if (clean.length < 3 || clean.length > 50) return false;
+
+  // Reject generic placeholders
+  if (
+    /^(core\s*concept|core\s*principle|topic\s*\d+|concept|untitled)$/i.test(
+      clean,
+    )
+  )
+    return false;
 
   // Reject conversational clauses, sentence fragments, and preambles
   const invalidStart =
@@ -908,19 +973,27 @@ function cleanDetailPhrase(detail) {
   if (!detail || typeof detail !== "string")
     return "Core technical mechanism and property";
   let clean = detail
-    .replace(/^(\⚙️|concept|detail|summary|mechanism)\s*[:.-]\s*/i, "")
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
+    .replace(/^(concept|detail|summary|mechanism)\s*[:.-]\s*/i, "")
     .replace(BANNED_CONCEPT_WORDS, "")
     .replace(/\s+/g, " ")
     .trim();
   if (clean.length < 8) return "Core technical mechanism and property";
-  return compactNote(clean, 16);
+  return compactNote(clean, 20);
 }
 
-function cleanConceptPhrase(rawText, maxWords = 4) {
+function cleanConceptPhrase(rawText, maxWords = 5) {
   if (!rawText || isNonEnglishScript(rawText)) {
-    return "Core Concept";
+    return "";
   }
   let text = (rawText || "")
+    .replace(
+      /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
+      "",
+    )
     .replace(/["'`:;()\[\]{}|\\/<>]/g, " ")
     .replace(
       /\b(study assistant|transcript|speaker|in summary|look fair warning|fair warning|talking about pizza|by talking about)\b/gi,
@@ -950,7 +1023,7 @@ function cleanConceptPhrase(rawText, maxWords = 4) {
     words.shift();
   }
 
-  if (words.length === 0) return "Core Principle";
+  if (words.length === 0) return "";
   const result = words.join(" ");
   return result.charAt(0).toUpperCase() + result.slice(1);
 }
@@ -961,7 +1034,7 @@ function buildStudyFallback(
   stepIndex = 0,
   timeRange = "",
 ) {
-  const cleanTitle = cleanConceptPhrase(sessionTitle || "Academic Lecture", 4);
+  const cleanTitle = cleanLectureTitle(sessionTitle || "Academic Lecture", 50);
 
   // If spoken text is non-English script (e.g. Devanagari), translate/derive clean English concept
   if (isNonEnglishScript(spokenText)) {
@@ -1436,11 +1509,11 @@ function showNonEducationalContentMessage() {
   }
   mermaidContainer.innerHTML = `
     <div class="empty-diagram-msg" style="max-width: 440px; margin: auto; padding: 48px 20px; text-align: center;">
-      <div style="font-size: 2.2rem; margin-bottom: 12px;">🚫</div>
+      <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); margin-bottom: 8px;">Notice</div>
       <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">Non-Educational Content</div>
       <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;">${NON_EDUCATIONAL_MESSAGE}</div>
       <button id="forceStudyModeBtn" style="font-size: 0.8rem; font-weight: 500; padding: 7px 16px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color, #3f3f46); background: var(--bg-secondary, #27272a); color: var(--text-primary, #f4f4f5); transition: background 0.15s ease;">
-        ⚡ Generate Notes Anyway
+        Generate Notes Anyway
       </button>
     </div>
   `;
@@ -1757,14 +1830,15 @@ async function renderProgressiveUI(session, upToStepIndex) {
     studyNotes.scrollTop = studyNotes.scrollHeight;
   }
 
-  const rootTitle = cleanConceptPhrase(session.title || "Lecture Overview", 4);
+  const rootTitle = cleanLectureTitle(session.title || "Lecture Overview", 60);
+  const rootLabel = formatMermaidNodeText(rootTitle, 36, 75);
   const mermaidLines = [
     "flowchart TD",
-    'ROOT(["📘 ' + sanitizeMermaidText(rootTitle, 40) + '"])',
-    "classDef default fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-family:Inter;",
-    "classDef rootNode fill:#3f3f46,stroke:#52525b,stroke-width:2px,color:#ffffff,font-weight:bold;",
-    "classDef conceptNode fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#dbeafe,font-weight:600;",
-    "classDef detailNode fill:#18181b,stroke:#52525b,stroke-width:1.2px,color:#d4d4d8,font-size:12px;",
+    'ROOT(["' + rootLabel + '"])',
+    "classDef default fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-family:Inter,system-ui,sans-serif;",
+    "classDef rootNode fill:#27272a,stroke:#52525b,stroke-width:2px,color:#ffffff,font-weight:700,font-size:14px;",
+    "classDef conceptNode fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,font-weight:600,font-size:13px;",
+    "classDef detailNode fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-size:12.5px;",
     "class ROOT rootNode;",
   ];
 
@@ -1781,13 +1855,19 @@ async function renderProgressiveUI(session, upToStepIndex) {
     const cId = "C" + (i + 1);
     const dId = "D" + (i + 1);
 
-    const concept = sanitizeMermaidText(
-      step.mainConcept || "Topic " + (i + 1),
-      35,
-    );
-    const detail = sanitizeMermaidText(
+    const rawConcept =
+      step.mainConcept &&
+      !/^(core\s*concept|core\s*principle|topic\s*\d+|concept)$/i.test(
+        step.mainConcept.trim(),
+      )
+        ? step.mainConcept
+        : `${rootTitle} Step ${i + 1}`;
+    const concept = formatMermaidNodeText(rawConcept, 32, 60);
+
+    const detail = formatMermaidNodeText(
       step.explanation || step.subBranchB || "",
-      55,
+      40,
+      110,
     );
 
     mermaidLines.push(
@@ -1809,7 +1889,7 @@ async function renderProgressiveUI(session, upToStepIndex) {
       detail.toLowerCase() !== "supporting detail" &&
       detail.toLowerCase() !== "none"
     ) {
-      mermaidLines.push(dId + '("⚙️ ' + detail + '")');
+      mermaidLines.push(dId + '("' + detail + '")');
       mermaidLines.push(cId + " -.-> " + dId);
       mermaidLines.push("class " + dId + " detailNode;");
     }
@@ -1905,9 +1985,9 @@ async function renderMermaid(code) {
   }
 }
 
-// ============================================================================
+
 // 4. HIGH-RANGE ZOOM (10% TO 800%) + DRAG-TO-PAN + WHEEL ZOOM
-// ============================================================================
+
 function applyZoomAndPan() {
   const target = document.getElementById("mermaidZoomTarget");
   if (target) {
@@ -1967,9 +2047,8 @@ window.addEventListener("mouseup", () => {
   mermaidContainer.classList.remove("dragging");
 });
 
-// ============================================================================
+
 // 5. START BUTTON, CONTINUOUS WATCH LOOP & FULLSCREEN LOCK (DIRECT POPUP FIXED)
-// ============================================================================
 startStudyBtn.addEventListener("click", async () => {
   const url = ytUrlInput.value.trim();
   const videoId = extractVideoId(url);
