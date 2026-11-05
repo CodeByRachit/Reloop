@@ -35,7 +35,7 @@ const MODELS = {
 };
 
 const STEP_INTERVAL_SECONDS = 15;
-const NOTE_GENERATION_VERSION = 18;
+const NOTE_GENERATION_VERSION = 19;
 const CLASSIFICATION_VERSION = 6;
 const NON_EDUCATIONAL_MESSAGE =
   "This does not appear to be an educational video. Notes are unavailable for this content.";
@@ -791,6 +791,8 @@ const STOP_WORDS_END = new Set([
   "that",
   "which",
   "who",
+  "whom",
+  "whose",
   "how",
   "why",
   "where",
@@ -801,11 +803,249 @@ const STOP_WORDS_END = new Set([
   "were",
   "be",
   "been",
+  "being",
   "has",
   "have",
   "had",
+  "do",
+  "does",
+  "did",
   "into",
   "about",
+  "above",
+  "below",
+  "beneath",
+  "under",
+  "over",
+  "now",
+  "then",
+  "here",
+  "there",
+  "they",
+  "them",
+  "their",
+  "theirs",
+  "it",
+  "its",
+  "this",
+  "these",
+  "those",
+  "we",
+  "us",
+  "our",
+  "you",
+  "your",
+  "yours",
+  "i",
+  "me",
+  "my",
+  "he",
+  "him",
+  "his",
+  "she",
+  "her",
+  "well",
+  "simply",
+  "put",
+  "terms",
+  "actually",
+  "just",
+  "also",
+  "before",
+  "after",
+  "got",
+  "get",
+  "gets",
+  "getting",
+  "goes",
+  "go",
+  "going",
+  "say",
+  "saying",
+  "says",
+  "tell",
+  "tells",
+  "telling",
+  "look",
+  "looks",
+  "looking",
+  "see",
+  "sees",
+  "seeing",
+  "talk",
+  "talks",
+  "talking",
+  "thing",
+  "things",
+  "part",
+  "parts",
+  "step",
+  "steps",
+  "today",
+  "now",
+  "again",
+  "already",
+  "very",
+  "really",
+  "quite",
+  "too",
+  "so",
+  "all",
+  "some",
+  "any",
+  "no",
+  "not",
+  "only",
+  "such",
+  "than",
+  "more",
+  "most",
+  "determines",
+  "determine",
+  "defining",
+  "defines",
+  "define",
+  "generates",
+  "generate",
+  "generating",
+  "occurs",
+  "occur",
+  "occurring",
+  "within",
+  "without",
+  "through",
+  "across",
+  "between",
+  "produces",
+  "produce",
+  "producing",
+  "converts",
+  "convert",
+  "converting",
+  "transforms",
+  "transform",
+  "transformed",
+  "created",
+  "developed",
+  "established",
+  "occurred",
+  "resulted",
+  "leads",
+  "lead",
+  "leading",
+  "shows",
+  "show",
+  "showing",
+  "gives",
+  "give",
+  "giving",
+  "makes",
+  "make",
+  "making",
+  "forms",
+  "form",
+  "forming",
+  "causes",
+  "cause",
+  "causing",
+  "includes",
+  "include",
+  "including",
+  "contains",
+  "contain",
+  "containing",
+  "requires",
+  "require",
+  "allows",
+  "allow",
+  "allowing",
+  "provides",
+  "provide",
+  "providing",
+  "represents",
+  "represent",
+  "invaded",
+  "attacks",
+  "move",
+  "moved",
+  "moving",
+  "moves",
+  "states",
+  "state",
+  "equals",
+  "equal",
+]);
+
+const STOP_WORDS_START = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "but",
+  "so",
+  "by",
+  "with",
+  "if",
+  "when",
+  "where",
+  "why",
+  "how",
+  "as",
+  "to",
+  "for",
+  "about",
+  "into",
+  "onto",
+  "under",
+  "beneath",
+  "from",
+  "at",
+  "in",
+  "on",
+  "of",
+  "before",
+  "after",
+  "while",
+  "because",
+  "since",
+  "now",
+  "then",
+  "here",
+  "there",
+  "they",
+  "we",
+  "you",
+  "i",
+  "he",
+  "she",
+  "it",
+  "this",
+  "that",
+  "these",
+  "those",
+  "well",
+  "simply",
+  "put",
+  "terms",
+  "actually",
+  "just",
+  "also",
+  "let",
+  "lets",
+  "going",
+  "talking",
+  "saying",
+  "looking",
+  "seeing",
+  "welcome",
+  "hello",
+  "hey",
+  "today",
+  "ok",
+  "okay",
+  "alright",
+  "right",
 ]);
 
 const FILLER_PREFIXES = [
@@ -958,6 +1198,178 @@ function cleanExamplePhrase(text) {
 const BANNED_CONCEPT_WORDS =
   /\b(fair\s*warning|hungry|pizza|taste|tasty|delicious|coffee|cookie|cake|food|sandwich|burger|eating|eat|guy|guys|folks|welcome|subscribe|like|video|channel|watch|watching|talking|saying|warning)\b/gi;
 
+function cleanSpokenDisfluencies(text) {
+  if (!text) return "";
+  return String(text)
+    // Acronym recovery from audio transcription
+    .replace(/\b(a\s+l|a\s+i|a\.\s*i\.)\b/gi, "AI")
+    .replace(/\b(m\s+l|m\.\s*l\.)\b/gi, "ML")
+    .replace(/\b(n\s+n|n\.\s*n\.)\b/gi, "NN")
+    .replace(/\b(d\s+l|d\.\s*l\.)\b/gi, "DL")
+    .replace(/\b(l\s+l\s+m|l\s+l\s+m\s+s)\b/gi, "LLM")
+    // Stutters and disfluencies
+    .replace(/\b(let\s*'?s\s+let\s*'?s)\b/gi, "let's")
+    .replace(/\b(the\s+the)\b/gi, "the")
+    .replace(/\b(that\s+that)\b/gi, "that")
+    .replace(/\b(we\s+we)\b/gi, "we")
+    .replace(/\b(in\s+in)\b/gi, "in")
+    .replace(/\b(is\s+is)\b/gi, "is")
+    // Conversational preambles and lead-ins common in lectures (delimit with comma to preserve clause boundaries)
+    .replace(
+      /\b(terms\s+well\s+put\s+simply|well\s+put\s+simply|simply\s+put|put\s+simply|terms\s+well\s+put)\b/gi,
+      ", ",
+    )
+    .replace(
+      /\b(before\s+we\s+(?:get|got)\s+to\s+that|by\s+now\s+before\s+we)\b/gi,
+      ", ",
+    )
+    .replace(
+      /\blet\s*'?s\s+(?:address|look\s+at|talk\s+about|consider|examine|discuss)(?:\s+the)?(?:\s+fundamental)?(?:\s+question)?(?:\s+here)?\b/gi,
+      ", ",
+    )
+    .replace(/\b(address\s+the\s+fundamental\s+question)\b/gi, ", ")
+    .replace(
+      /\b(actually\s+the\s+hierarchy\s+goes(?:\s+this)?|the\s+hierarchy\s+goes(?:\s+this)?)\b/gi,
+      ", ",
+    )
+    .replace(
+      /\b(beneath\s+that\s+then\s+we\s+have|beneath\s+that\s+we\s+have)\b/gi,
+      ", ",
+    )
+    .replace(
+      /\b(now\s+a\s+subfield\s+of|a\s+subfield\s+of|is\s+a\s+subfield\s+of)\b/gi,
+      ", ",
+    )
+    .replace(
+      /\b(what\s+we\s+have\s+here\s+is|what\s+is\s+meant\s+by|as\s+you\s+can\s+see|if\s+you\s+look\s+at)\b/gi,
+      ", ",
+    )
+    .replace(/,\s*,+/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const PREPOSITIONS = new Set([
+  "through",
+  "across",
+  "within",
+  "without",
+  "between",
+  "into",
+  "onto",
+  "under",
+  "over",
+  "from",
+  "with",
+  "about",
+  "above",
+  "below",
+  "beneath",
+  "during",
+  "towards",
+  "around",
+]);
+
+const FINITE_VERBS = new Set([
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "has",
+  "have",
+  "had",
+  "do",
+  "does",
+  "did",
+]);
+
+function extractUniversalConcept(strippedText, sessionTitle = "", stepIndex = 0) {
+  const cleaned = cleanSpokenDisfluencies(strippedText);
+
+  // 1. Definition, relationship, and categorization marker patterns (universal across all academic subjects)
+  const patterns = [
+    /\b(?:the\s+law\s+of|the\s+concept\s+of|theory\s+of|principle\s+of|model\s+of)\s+([a-zA-Z0-9 -]+?)(?:\s+(?:is|determines|explains|states|defines|describes)\b|[.,;]|$)/i,
+    /\b([a-zA-Z0-9 -]+?)\s+(?:is\s+a\s+subset\s+of|is\s+defined\s+as|is\s+known\s+as|is\s+called|is\s+a\s+subfield\s+of|is\s+a\s+branch\s+of|refers\s+to|consists\s+of)\b/i,
+    /\b(?:subfield\s+of\s+[a-zA-Z0-9 -]+\s+is)\s+([a-zA-Z0-9 -]{3,30})/i,
+    /\b(?:called|known\s+as|named)\s+([a-zA-Z0-9 -]{3,30})/i,
+  ];
+
+  for (const pat of patterns) {
+    const m = cleaned.match(pat);
+    if (m && m[1]) {
+      const c = cleanConceptPhrase(m[1], 4);
+      if (isValidStudyConcept(c)) return c;
+    }
+  }
+
+  // 2. Candidate clause extraction & scoring (subject-agnostic linguistics)
+  const clauses = cleaned.split(
+    /(?<=[.!?])\s+|[;,]+|\s+(?=(?:and|but|while|because|or|then|beneath)\b)/i,
+  );
+  let bestCandidate = "";
+  let bestScore = -1;
+
+  clauses.forEach((clause, clauseIdx) => {
+    const words = clause.split(/\s+/).filter((w) => /^[a-zA-Z0-9-]{2,}$/.test(w));
+    for (let len = 3; len >= 1; len--) {
+      for (let i = 0; i <= words.length - len; i++) {
+        const sliceWords = words.slice(i, i + len);
+        if (
+          sliceWords.some(
+            (w) =>
+              PREPOSITIONS.has(w.toLowerCase()) ||
+              FINITE_VERBS.has(w.toLowerCase()),
+          )
+        ) {
+          continue;
+        }
+
+        const candidate = cleanConceptPhrase(sliceWords.join(" "), 4);
+        if (!isValidStudyConcept(candidate)) continue;
+
+        let score = 0;
+        const cWords = candidate.split(" ");
+        if (cWords.length === 2) score += 10;
+        else if (cWords.length === 3) score += 8;
+        else if (cWords.length === 1) score += 6;
+        else score += 4;
+
+        // Position bonus: start of the opening sentence/clause is the subject
+        if (clauseIdx === 0 && i === 0) score += 8;
+
+        // Academic noun morphology bonus across sciences, humanities, math
+        for (const w of cWords) {
+          if (/^[A-Z]{2,}$/.test(w)) score += 10; // Acronym e.g. AI, DNA, RNA, GDP, ATP, CPU
+          if (
+            /(tion|sion|sis|ism|ity|ment|ology|ence|ance|ics|ure|phy|ist|gen|ose|ium|ate|ia)$/i.test(
+              w,
+            )
+          ) {
+            score += 6;
+          }
+        }
+
+        if (
+          sessionTitle &&
+          candidate.toLowerCase().includes(sessionTitle.toLowerCase())
+        ) {
+          score += 3;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestCandidate = candidate;
+        }
+      }
+    }
+  });
+
+  return bestCandidate;
+}
+
 function isValidStudyConcept(text) {
   if (!text || typeof text !== "string") return false;
   const clean = text.toLowerCase().trim();
@@ -973,8 +1385,13 @@ function isValidStudyConcept(text) {
 
   // Reject conversational clauses, sentence fragments, and preambles
   const invalidStart =
-    /^(look|and|or|but|so|by|with|if|when|where|why|how|as|to|for|about|talking|saying|feeling|warning|trying|going|welcome|hello|hey|today|now)\b/i;
+    /^(look|and|or|but|so|by|with|if|when|where|why|how|as|to|for|about|talking|saying|feeling|warning|trying|going|welcome|hello|hey|today|now|terms|well|simply|put|actually|before|after|beneath|address|the\s+hierarchy)\b/i;
   if (invalidStart.test(clean)) return false;
+
+  // Reject conversational endings
+  const invalidEnd =
+    /\b(now|then|they|them|it|this|that|these|those|here|there|put|well|got|get|goes|say|says|saying)\b/i;
+  if (invalidEnd.test(clean)) return false;
 
   // Reject conversational filler, foods, analogies, and unnecessary words
   if (BANNED_CONCEPT_WORDS.test(clean)) return false;
@@ -985,24 +1402,33 @@ function isValidStudyConcept(text) {
 function cleanDetailPhrase(detail) {
   if (!detail || typeof detail !== "string")
     return "Core technical mechanism and property";
-  let clean = detail
+  let clean = cleanSpokenDisfluencies(detail)
     .replace(
       /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
       "",
     )
     .replace(/^(concept|detail|summary|mechanism)\s*[:.-]\s*/i, "")
     .replace(BANNED_CONCEPT_WORDS, "")
+    // Remove isolated single stray letters at the end (e.g. cut off words from speech recognition)
+    .replace(/\s+[b-hj-z]$/i, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  clean = clean.replace(
+    /^(and|or|but|so|then|now|actually|also|simply|just)\s+/i,
+    "",
+  );
   if (clean.length < 8) return "Core technical mechanism and property";
-  return compactNote(clean, 20);
+  const compacted = compactNote(clean, 18);
+  if (!compacted) return "Core technical mechanism and property";
+  return compacted.charAt(0).toUpperCase() + compacted.slice(1);
 }
 
-function cleanConceptPhrase(rawText, maxWords = 5) {
+function cleanConceptPhrase(rawText, maxWords = 4) {
   if (!rawText || isNonEnglishScript(rawText)) {
     return "";
   }
-  let text = (rawText || "")
+  let text = cleanSpokenDisfluencies(rawText)
     .replace(
       /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0E\uFE0F]/gu,
       "",
@@ -1023,22 +1449,52 @@ function cleanConceptPhrase(rawText, maxWords = 5) {
   let words = text
     .replace(/[^\p{L}\p{M}\p{N} -]/gu, " ")
     .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, maxWords);
+    .filter(Boolean);
 
+  // Remove leading stop words
   while (
-    words.length > 1 &&
-    STOP_WORDS_END.has(words[words.length - 1].toLowerCase())
+    words.length > 0 &&
+    (STOP_WORDS_START.has(words[0].toLowerCase()) ||
+      STOP_WORDS_END.has(words[0].toLowerCase()))
   ) {
-    words.pop();
-  }
-  while (words.length > 1 && STOP_WORDS_END.has(words[0].toLowerCase())) {
     words.shift();
   }
 
+  // Remove trailing stop words
+  while (
+    words.length > 0 &&
+    (STOP_WORDS_END.has(words[words.length - 1].toLowerCase()) ||
+      STOP_WORDS_START.has(words[words.length - 1].toLowerCase()))
+  ) {
+    words.pop();
+  }
+
+  words = words.slice(0, maxWords);
+
+  // Re-check after slicing
+  while (
+    words.length > 0 &&
+    (STOP_WORDS_END.has(words[words.length - 1].toLowerCase()) ||
+      STOP_WORDS_START.has(words[words.length - 1].toLowerCase()))
+  ) {
+    words.pop();
+  }
+
   if (words.length === 0) return "";
-  const result = words.join(" ");
-  return result.charAt(0).toUpperCase() + result.slice(1);
+  const result = words
+    .map((w) => {
+      if (
+        /^(ai|ml|nn|dl|llm|llms|nlp|cv|rl|cnn|rnn|sql|api|cpu|gpu|ram|os|html|css|js|json|rest|xml|http|https)$/i.test(
+          w,
+        )
+      ) {
+        return w.toUpperCase();
+      }
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    })
+    .join(" ");
+
+  return result;
 }
 
 function buildStudyFallback(
@@ -1049,12 +1505,10 @@ function buildStudyFallback(
 ) {
   const cleanTitle = cleanLectureTitle(sessionTitle || "Academic Lecture", 50);
 
-  // Detect and isolate analogies or examples (e.g., pizza, food, cars) for study notes only
-  let cleanSpoken = String(spokenText || "")
-    .replace(/["'`:;()\[\]{}|\\/<>]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  // Clean speech disfluencies and recover acronyms
+  let cleanSpoken = cleanSpokenDisfluencies(spokenText || "");
 
+  // Detect and isolate analogies or examples (e.g., pizza, food, cars) for study notes only
   let exampleText = null;
   const analogyRegex =
     /\b(pizza|burger|sandwich|cookie|cake|coffee|tea|food|eating|delicious|taste|tasty|hungry)\b/i;
@@ -1087,25 +1541,14 @@ function buildStudyFallback(
     .replace(/\s+/g, " ")
     .trim();
 
-  // Extract meaningful technical tokens (prioritize Latin/English words even in non-English audio)
-  const words = strippedText
-    .split(/\s+/)
-    .filter(
-      (w) =>
-        /^[a-zA-Z]{3,}$/.test(w) && !STOP_WORDS_END.has(w.toLowerCase()),
-    );
-
   let conceptName = "";
   if (stepIndex === 0) {
     conceptName = `${cleanTitle} Overview`;
-  } else if (words.length >= 2) {
-    conceptName = cleanConceptPhrase(words.slice(0, 3).join(" "), 3);
-  } else if (words.length === 1) {
-    conceptName = `${cleanConceptPhrase(words[0], 1)} Concept`;
-  }
-
-  if (!isValidStudyConcept(conceptName)) {
-    conceptName = `${cleanTitle} Key Analysis (${timeRange})`;
+  } else {
+    conceptName = extractUniversalConcept(strippedText, cleanTitle, stepIndex);
+    if (!conceptName || !isValidStudyConcept(conceptName)) {
+      conceptName = `${cleanTitle} Step ${stepIndex + 1}`;
+    }
   }
 
   // Construct primary explanation and secondary detail without static repetition
@@ -1114,7 +1557,7 @@ function buildStudyFallback(
 
   if (stepIndex === 0) {
     primaryNote = `Introduces foundational principles and comparative structure of ${cleanTitle}.`;
-    secondaryNote = `Examines algorithmic architectures and automated feature representation capabilities.`;
+    secondaryNote = `Examines theoretical mechanisms, definitions, and operational structure.`;
   } else {
     const sentences = strippedText
       .split(/(?<=[.!?])\s+|[;,]+|\s+(?=(?:and|but|while|because|when)\b)/i)
@@ -1125,16 +1568,14 @@ function buildStudyFallback(
 
     if (sentences.length >= 1) {
       primaryNote = cleanDetailPhrase(sentences[0]);
-    } else if (words.length >= 2) {
-      primaryNote = `Analyzes ${words.slice(0, 3).join(" ")} operations and theoretical properties (${timeRange}).`;
     } else {
-      primaryNote = `Explores algorithmic principles and implementation mechanisms at ${timeRange}.`;
+      primaryNote = `Examines core theoretical properties and functional mechanisms of ${conceptName}.`;
     }
 
     if (sentences.length >= 2) {
       secondaryNote = cleanDetailPhrase(sentences[1]);
     } else {
-      secondaryNote = `Domain context and structural formulation under ${cleanTitle}.`;
+      secondaryNote = `Analyzes operational structure and principles in the context of ${cleanTitle}.`;
     }
   }
 
@@ -1842,8 +2283,7 @@ async function renderProgressiveUI(session, upToStepIndex) {
     'ROOT(["' + rootLabel + '"])',
     "classDef default fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-family:Inter,system-ui,sans-serif;",
     "classDef rootNode fill:#27272a,stroke:#52525b,stroke-width:2px,color:#ffffff,font-weight:700,font-size:14px;",
-    "classDef conceptNode fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc,font-weight:600,font-size:13px;",
-    "classDef detailNode fill:#18181b,stroke:#3f3f46,stroke-width:1.5px,color:#f4f4f5,font-size:12.5px;",
+    "classDef conceptNode fill:#0f172a,stroke:#3b82f6,stroke-width:1.5px,color:#f8fafc,font-size:12.5px;",
     "class ROOT rootNode;",
   ];
 
@@ -1894,7 +2334,6 @@ async function renderProgressiveUI(session, upToStepIndex) {
     const step = steps[key];
     const timeTag = formatTime(key * STEP_INTERVAL_SECONDS);
     const cId = "C" + (i + 1);
-    const dId = "D" + (i + 1);
 
     const rawConcept =
       step.mainConcept &&
@@ -1911,9 +2350,18 @@ async function renderProgressiveUI(session, upToStepIndex) {
     );
     const detail = formatMermaidNodeText(rawDetail, 40, 110);
 
-    mermaidLines.push(
-      cId + '["' + (i + 1) + ". " + concept + " (" + timeTag + ')"]',
-    );
+    let cardContent =
+      "<b>" + (i + 1) + ". " + concept + " (" + timeTag + ")</b>";
+    if (
+      detail &&
+      detail.toLowerCase() !== "main point" &&
+      detail.toLowerCase() !== "supporting detail" &&
+      detail.toLowerCase() !== "none"
+    ) {
+      cardContent += "<br/>" + detail;
+    }
+
+    mermaidLines.push(cId + '["' + cardContent + '"]');
     mermaidLines.push("class " + cId + " conceptNode;");
 
     if (i === 0) {
@@ -1922,17 +2370,6 @@ async function renderProgressiveUI(session, upToStepIndex) {
       );
     } else {
       mermaidLines.push("C" + i + " --> " + cId);
-    }
-
-    if (
-      detail &&
-      detail.toLowerCase() !== "main point" &&
-      detail.toLowerCase() !== "supporting detail" &&
-      detail.toLowerCase() !== "none"
-    ) {
-      mermaidLines.push(dId + '("' + detail + '")');
-      mermaidLines.push(cId + " -.-> " + dId);
-      mermaidLines.push("class " + dId + " detailNode;");
     }
   });
 
